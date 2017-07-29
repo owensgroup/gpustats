@@ -1,5 +1,7 @@
 # GPU Statistics
 
+Data sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units)
+
 - [Memory Bandwidth over Time](plots/Memory Bandwidth over Time.html)
 - [Processing Power over Time](plots/Processing Power over Time.html)
 - [SM count over Time](plots/SM count over Time.html)
