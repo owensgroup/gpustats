@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- Import Vega 3 & Vega-Lite 2 js (does not have to be from cdn) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.0-rc4/vega.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.10/vega-lite.js"></script>
+  <!-- Import vega-embed -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.19/vega-embed.js"></script>
+  <title>Die Size over Time</title>
+
+  <style media="screen">
+    /* Add space between vega-embed links */
+    /* http://vega.github.io/vega-tutorials/airports/ */
+    .vega-embed .vega-actions a {
+      margin-left: 1em;
+      visibility: hidden;
+    }
+    .vega-embed:hover .vega-actions a {
+      visibility: visible;
+    }
+  </style>
+</head>
+<body>
+
+<div id="vis"></div>
+
+<script type="text/javascript">
+  var spec = "Die Size over Time.json";
+  vega.embed('#vis', spec);
+</script>
+</body>
+</html>
