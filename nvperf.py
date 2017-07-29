@@ -152,7 +152,7 @@ template = """<!DOCTYPE html>
 </body>
 </html>"""
 
-readme = "# GPU Statistics\n\n"
+readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units).\n\n"
 
 outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
 for (chart, title) in [(mb, "Memory Bandwidth over Time"),
@@ -167,7 +167,9 @@ for (chart, title) in [(mb, "Memory Bandwidth over Time"),
     # save html
     # print chart.to_dict()
     with open(os.path.join(outputdir, title + '.json'), 'w') as f:
-        f.write(chart.to_json())
+        j = chart.to_json()
+        j = j[:-1] + ', "height": 750, "width": 1213}'
+        f.write(j)
     with open(os.path.join(outputdir, title + '.html'), 'w') as f:
         f.write(chart.to_html(title=title, template=template))
     readme += "- [%s](plots/%s.html)\n" % (title, title)
