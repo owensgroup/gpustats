@@ -150,11 +150,10 @@ template = """<!DOCTYPE html>
 <div id="vis"></div>
 
 <script type="text/javascript">
-  var spec = "https://owensgroup.github.io/gpustats/plots/{title}.json";
   var opt = {{
     "mode": "vega-lite",
   }};
-  vega.embed('#vis', spec, opt);
+  vega.embed('#vis', {spec}, opt);
 </script>
 </body>
 </html>"""
@@ -173,14 +172,14 @@ for (chart, title) in [(mb, "Memory Bandwidth over Time"),
                        (sh, "Shader count over Time")]:
     # save html
     # print chart.to_dict()
-    with open(os.path.join(outputdir, title + '.json'), 'w') as f:
-        d = chart.to_dict()
-        d['height'] = 750
-        d['width'] = 1213
-        d['encoding']['tooltip'] = {"field": "Model", "type": "nominal"}
-        j = json.dump(d, f)
     with open(os.path.join(outputdir, title + '.html'), 'w') as f:
-        f.write(chart.to_html(title=title, template=template))
+        spec = chart.to_dict()
+        spec['height'] = 750
+        spec['width'] = 1213
+        spec['encoding']['tooltip'] = {"field": "Model", "type": "nominal"}
+        f.write(template.format(spec=json.dumps(spec), title=title))
+        # f.write(chart.from_json(spec_str).to_html(
+        # title=title, template=template))
     readme += "- [%s](plots/%s.html)\n" % (title, title)
 
 with open(os.path.join(outputdir, '../README.md'), 'w') as f:
