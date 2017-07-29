@@ -22,6 +22,9 @@ for df in dfs:
 
 df = pd.concat(dfs, ignore_index=True)
 
+# remove references from end of model names
+df['Model'] = df['Model'].str.replace(r'\[\d+\]$', '')
+
 
 def merge(df, dst, src):
     df[dst] = df[dst].fillna(df[src])
@@ -34,10 +37,12 @@ df = merge(df, 'SM count', 'SMX count')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS)')
 
-# merge GFLOPS columns with "Boost" column headers
+# merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
         df['Processing power (GFLOPS) %s precision (Boost)' % prec].str.split(' ').str[0])
+    df = df.rename(columns={'Processing power (GFLOPS) %s precision' % prec:
+                            '%s-precision GFLOPS' % prec})
 
 # merge transistor counts
 df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
@@ -48,9 +53,9 @@ df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 
 # compute arithmetic intensity and FLOPS/Watt
 df['Arithmetic intensity (FLOP/B)'] = pd.to_numeric(df[
-    'Processing power (GFLOPS) Single precision'], errors='coerce') / pd.to_numeric(df['Memory Bandwidth (GB/s)'], errors='coerce')
+    'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['Memory Bandwidth (GB/s)'], errors='coerce')
 df['FLOPS/Watt'] = pd.to_numeric(df[
-    'Processing power (GFLOPS) Single precision'], errors='coerce') / pd.to_numeric(df['TDP (watts)'], errors='coerce')
+    'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (watts)'], errors='coerce')
 
 df['Launch'] = df['Launch'].apply(
     lambda x: pd.to_datetime(x,
@@ -65,9 +70,9 @@ mb = Chart(df).mark_point().encode(
 )
 pr = Chart(pd.melt(df,
                    id_vars=['Launch'],
-                   value_vars=['Processing power (GFLOPS) Single precision',
-                               'Processing power (GFLOPS) Double precision',
-                               'Processing power (GFLOPS) Half precision'],
+                   value_vars=['Single-precision GFLOPS',
+                               'Double-precision GFLOPS',
+                               'Half-precision GFLOPS'],
                    var_name='Datatype',
                    value_name='Processing power (GFLOPS)')).mark_point().encode(
     x='Launch:T',
