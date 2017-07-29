@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import pandas as pd
+import numpy as np
 import requests
 import re
 import os
@@ -36,6 +37,9 @@ df = merge(df, 'SM count', 'SMM count')
 df = merge(df, 'SM count', 'SMX count')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS)')
+df = merge(df, 'Memory Bandwidth (GB/s)',
+           'Memory configuration Bandwidth (GB/s)')
+
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
@@ -57,6 +61,10 @@ df['Arithmetic intensity (FLOP/B)'] = pd.to_numeric(df[
 df['FLOPS/Watt'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (watts)'], errors='coerce')
 
+# mark mobile processors
+df['GPU Type'] = np.where(
+    df['Model'].str.contains(r' [\d]+M(X)?|(Notebook)'), 'Mobile', 'Desktop')
+
 df['Launch'] = df['Launch'].apply(
     lambda x: pd.to_datetime(x,
                              infer_datetime_format=True,
@@ -66,10 +74,11 @@ mb = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
-        )
+        ),
+    color='GPU Type'
 )
 pr = Chart(pd.melt(df,
-                   id_vars=['Launch', 'Model'],
+                   id_vars=['Launch', 'Model', 'GPU Type'],
                    value_vars=['Single-precision GFLOPS',
                                'Double-precision GFLOPS',
                                'Half-precision GFLOPS'],
@@ -80,6 +89,7 @@ pr = Chart(pd.melt(df,
         scale=Scale(type='log'),
         ),
     color='Datatype',
+    shape='GPU Type',
 )
 
 sm = Chart(df).mark_point().encode(
@@ -90,13 +100,13 @@ die = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Die size (mm2):Q',
         scale=Scale(type='log'),
-        )
+        ),
 )
 xt = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Transistors (billion):Q',
         scale=Scale(type='log'),
-        )
+        ),
 )
 fab = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -107,18 +117,21 @@ fab = Chart(df).mark_point().encode(
 ai = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Arithmetic intensity (FLOP/B):Q',
+    color='GPU Type'
 )
 
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
     y='FLOPS/Watt:Q',
+    color='GPU Type'
 )
 
 sh = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
-        )
+        ),
+    color='GPU Type'
 )
 
 # df.to_csv("/tmp/nv.csv", encoding="utf-8")
