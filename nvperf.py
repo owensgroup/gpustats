@@ -69,7 +69,7 @@ mb = Chart(df).mark_point().encode(
         )
 )
 pr = Chart(pd.melt(df,
-                   id_vars=['Launch'],
+                   id_vars=['Launch', 'Model'],
                    value_vars=['Single-precision GFLOPS',
                                'Double-precision GFLOPS',
                                'Half-precision GFLOPS'],
