@@ -172,6 +172,7 @@ for (chart, title) in [(mb, "Memory Bandwidth over Time"),
         d = chart.to_dict()
         d['height'] = 750
         d['width'] = 1213
+        d['encoding']['tooltip'] = {"field": "Model", "type": "ordinal"}
         j = json.dump(d, f)
     with open(os.path.join(outputdir, title + '.html'), 'w') as f:
         f.write(chart.to_html(title=title, template=template))
