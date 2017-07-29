@@ -4,6 +4,8 @@ import pandas as pd
 import requests
 import re
 import os
+import json
+
 from altair import *
 url = 'https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units'
 f = requests.get(url).text      # handles https
@@ -167,9 +169,10 @@ for (chart, title) in [(mb, "Memory Bandwidth over Time"),
     # save html
     # print chart.to_dict()
     with open(os.path.join(outputdir, title + '.json'), 'w') as f:
-        j = chart.to_json()
-        j = j[:-1] + ', "height": 750, "width": 1213}'
-        f.write(j)
+        d = chart.to_dict()
+        d['height'] = 750
+        d['width'] = 1213
+        j = json.dump(d, f)
     with open(os.path.join(outputdir, title + '.html'), 'w') as f:
         f.write(chart.to_html(title=title, template=template))
     readme += "- [%s](plots/%s.html)\n" % (title, title)
