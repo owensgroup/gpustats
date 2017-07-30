@@ -8,23 +8,50 @@ import os
 import json
 
 from altair import *
-url = 'https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units'
-f = requests.get(url).text      # handles https
-dfs = pd.read_html(f, match='Launch', parse_dates=True)
-for df in dfs:
-    # Multi-index to index
-    df.columns = [' '.join(col).strip() for col in df.columns.values]
-    # Get rid of 'Unnamed' column names
-    df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
-                  for col in df.columns.values]
-    # If a word ends in a number or number,comma,number, delete it
-    df.columns = [' '.join([re.sub('[\d,]+$', '', word) for word in col.split()])
-                  for col in df.columns.values]
 
-df = pd.concat(dfs, ignore_index=True)
+data = {
+    'NVIDIA': {'url': 'https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units',
+               },
+    'AMD': {'url': 'https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units',
+            }
+}
 
-# remove references from end of model names
-df['Model'] = df['Model'].str.replace(r'\[\d+\]$', '')
+for vendor in ['NVIDIA', 'AMD']:
+    # requests.get handles https
+    html = requests.get(data[vendor]['url']).text
+    # oddly, some dates look like:
+    # <td><span class="sortkey" style="display:none;speak:none">000000002010-02-25-0000</span><span style="white-space:nowrap">Feb 25, 2010</span></td>
+    html = re.sub(
+        r'<span [^>]*style="display:none[^>]*>([^<]+)</span>', '', html)
+    html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
+    with open('/tmp/%s.html' % vendor, 'w') as f:
+        f.write(html.encode('utf8'))
+
+    dfs = pd.read_html(html, match='Launch', parse_dates=True)
+    for df in dfs:
+        # Multi-index to index
+        df.columns = [' '.join(col).strip() for col in df.columns.values]
+        # Get rid of 'Unnamed' column names
+        df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
+                      for col in df.columns.values]
+
+        # If a column-name word ends in a number or number,comma,number, delete
+        # it
+        df.columns = [' '.join([re.sub('[\d,]+$', '', word) for word in col.split()])
+                      for col in df.columns.values]
+        # If a column-name word ends with one or more '[x]',
+        # where 'x' is a lower-case letter or number, delete it
+        df.columns = [' '.join([re.sub(r'(?:\[[a-z0-9]+\])+$', '', word) for word in col.split()])
+                      for col in df.columns.values]
+        df['Vendor'] = vendor
+        df['Launch'] = df['Launch'].apply(
+            lambda x: pd.to_datetime(x,
+                                     infer_datetime_format=True,
+                                     errors='coerce'))
+
+    data[vendor]['dfs'] = dfs
+
+df = pd.concat(data['NVIDIA']['dfs'] + data['AMD']['dfs'], ignore_index=True)
 
 
 def merge(df, dst, src):
@@ -37,14 +64,41 @@ df = merge(df, 'SM count', 'SMM count')
 df = merge(df, 'SM count', 'SMX count')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS)')
+df = merge(df, 'Processing power (GFLOPS) Single precision',
+           'Processing power (GFLOPS) Single')
+df = merge(df, 'Processing power (GFLOPS) Double precision',
+           'Processing power (GFLOPS) Double')
 df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
-
+df = merge(df, 'TDP (Watts)', 'TDP (Watts) GPU only')
+df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
+df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
+df = merge(df, 'Model', 'Model (Codename)')
+df = merge(df, 'Model', 'Model: Mobility Radeon')
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
+    tomerge = 'Processing power (GFLOPS) %s precision (Boost)' % prec
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
-        df['Processing power (GFLOPS) %s precision (Boost)' % prec].str.split(' ').str[0])
+        df[tomerge].str.split(' ').str[0])
+    df.drop(tomerge, axis=1, inplace=True)
+
+    tomerge = 'Processing power (GFLOPS) %s (Boost)' % prec
+    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
+        df[tomerge].str.split(' ').str[0])
+    df.drop(tomerge, axis=1, inplace=True)
+
+    if prec == 'Single':
+        tomerge = 'Processing power (GFLOPS) (Boost)'
+        df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
+            df[tomerge].str.split(' ').str[0])
+        df.drop(tomerge, axis=1, inplace=True)
+
+    tomerge = 'Processing power (TFLOPS) %s (Boost)' % prec
+    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
+        pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
+    df.drop(tomerge, axis=1, inplace=True)
+
     df = df.rename(columns={'Processing power (GFLOPS) %s precision' % prec:
                             '%s-precision GFLOPS' % prec})
 
@@ -54,31 +108,34 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
 
 # extract shader (processor) counts
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
+df = merge(df, 'Pixel/unified shader count', 'Stream processors')
+
+for col in ['Memory Bandwidth (GB/s)', 'TDP (Watts)']:
+    df[col] = pd.to_numeric(df[col], errors='coerce')
 
 # compute arithmetic intensity and FLOPS/Watt
 df['Arithmetic intensity (FLOP/B)'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['Memory Bandwidth (GB/s)'], errors='coerce')
 df['FLOPS/Watt'] = pd.to_numeric(df[
-    'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (watts)'], errors='coerce')
+    'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (Watts)'], errors='coerce')
+
+# remove references from end of model names
+df['Model'] = df['Model'].str.replace(r'(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$', '')
 
 # mark mobile processors
 df['GPU Type'] = np.where(
-    df['Model'].str.contains(r' [\d]+M(X)?|(Notebook)'), 'Mobile', 'Desktop')
-
-df['Launch'] = df['Launch'].apply(
-    lambda x: pd.to_datetime(x,
-                             infer_datetime_format=True,
-                             errors='coerce'))
+    df['Model'].str.contains(r' [\d]+M[X]?|\(Notebook\)'), 'Mobile', 'Desktop')
 
 mb = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
-    color='GPU Type'
+    color='GPU Type',
+    shape='Vendor',
 )
 pr = Chart(pd.melt(df,
-                   id_vars=['Launch', 'Model', 'GPU Type'],
+                   id_vars=['Launch', 'Model', 'GPU Type', 'Vendor'],
                    value_vars=['Single-precision GFLOPS',
                                'Double-precision GFLOPS',
                                'Half-precision GFLOPS'],
@@ -89,41 +146,47 @@ pr = Chart(pd.melt(df,
         scale=Scale(type='log'),
         ),
     color='Datatype',
-    shape='GPU Type',
+    shape='Vendor',
 )
 
 sm = Chart(df).mark_point().encode(
     x='Launch:T',
     y='SM count:Q',
+    shape='Vendor',
 )
 die = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Die size (mm2):Q',
         scale=Scale(type='log'),
         ),
+    color='Vendor',
 )
 xt = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Transistors (billion):Q',
         scale=Scale(type='log'),
         ),
+    color='Vendor',
 )
 fab = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Fab (nm):Q',
         scale=Scale(type='log'),
-        )
+        ),
+    color='Vendor',
 )
 ai = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Arithmetic intensity (FLOP/B):Q',
-    color='GPU Type'
+    color='GPU Type',
+    shape='Vendor',
 )
 
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
     y='FLOPS/Watt:Q',
-    color='GPU Type'
+    color='GPU Type',
+    shape='Vendor',
 )
 
 sh = Chart(df).mark_point().encode(
@@ -131,10 +194,11 @@ sh = Chart(df).mark_point().encode(
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
         ),
-    color='GPU Type'
+    color='GPU Type',
+    shape='Vendor',
 )
 
-# df.to_csv("/tmp/nv.csv", encoding="utf-8")
+df.to_csv("/tmp/gpu.csv", encoding="utf-8")
 
 template = """<!DOCTYPE html>
 <html>
