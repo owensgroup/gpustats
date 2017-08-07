@@ -126,13 +126,22 @@ df['Model'] = df['Model'].str.replace(r'(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$', '')
 df['GPU Type'] = np.where(
     df['Model'].str.contains(r' [\d]+M[X]?|\(Notebook\)'), 'Mobile', 'Desktop')
 
+# values=c("amd"="#ff0000",
+#   "nvidia"="#76b900",
+#   "intel"="#0860a8",
+
+colormap = Scale(domain=['AMD', 'NVIDIA'],
+                 range=['#ff0000', '#76b900'])
+
 mb = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
-    color='GPU Type',
-    shape='Vendor',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
+    shape='GPU Type',
 )
 pr = Chart(pd.melt(df,
                    id_vars=['Launch', 'Model', 'GPU Type', 'Vendor'],
@@ -145,48 +154,62 @@ pr = Chart(pd.melt(df,
     y=Y('Processing power (GFLOPS):Q',
         scale=Scale(type='log'),
         ),
-    color='Datatype',
-    shape='Vendor',
+    shape='Datatype',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 
 sm = Chart(df).mark_point().encode(
     x='Launch:T',
     y='SM count:Q',
-    shape='Vendor',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 die = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Die size (mm2):Q',
         scale=Scale(type='log'),
         ),
-    color='Vendor',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 xt = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Transistors (billion):Q',
         scale=Scale(type='log'),
         ),
-    color='Vendor',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 fab = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Fab (nm):Q',
         scale=Scale(type='log'),
         ),
-    color='Vendor',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 ai = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Arithmetic intensity (FLOP/B):Q',
-    color='GPU Type',
-    shape='Vendor',
+    shape='GPU Type',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
     y='FLOPS/Watt:Q',
-    color='GPU Type',
-    shape='Vendor',
+    shape='GPU Type',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 
 sh = Chart(df).mark_point().encode(
@@ -194,8 +217,10 @@ sh = Chart(df).mark_point().encode(
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
         ),
-    color='GPU Type',
-    shape='Vendor',
+    shape='GPU Type',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
 )
 
 df.to_csv("/tmp/gpu.csv", encoding="utf-8")
