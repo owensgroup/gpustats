@@ -9,6 +9,8 @@ import json
 
 from altair import *
 
+from fileops import save
+
 data = {
     'NVIDIA': {'url': 'https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units',
                },
@@ -54,30 +56,53 @@ for vendor in ['NVIDIA', 'AMD']:
 df = pd.concat(data['NVIDIA']['dfs'] + data['AMD']['dfs'], ignore_index=True)
 
 
-def merge(df, dst, src):
+def merge(df, dst, src, replaceNoWithNaN=False):
+    if replaceNoWithNaN:
+        df[src] = df[src].replace('No', np.nan)
     df[dst] = df[dst].fillna(df[src])
     df.drop(src, axis=1, inplace=True)
     return df
 
 # merge related columns
+df = merge(df, 'Model', 'Model Units')
 df = merge(df, 'SM count', 'SMM count')
 df = merge(df, 'SM count', 'SMX count')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS)')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS) Single')
+df = merge(df, 'Processing power (GFLOPS) Single precision',
+           'Processing power (GFLOPS) Single precision (MAD+MUL)',
+           replaceNoWithNaN=True)
+df = merge(df, 'Processing power (GFLOPS) Single precision',
+           'Processing power (GFLOPS) Single precision (MAD or FMA)',
+           replaceNoWithNaN=True)
 df = merge(df, 'Processing power (GFLOPS) Double precision',
            'Processing power (GFLOPS) Double')
+df = merge(df, 'Processing power (GFLOPS) Double precision',
+           'Processing power (GFLOPS) Double precision (FMA)',
+           replaceNoWithNaN=True)
 df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) GPU only')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
+df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
 df = merge(df, 'Model', 'Model (Codename)')
 df = merge(df, 'Model', 'Model: Mobility Radeon')
 
+# filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
+df[df['Chips'].str.contains(u'^[2-9]\u00d7') == False]
+df[df['Code name'].str.contains(u'^[2-9]\u00d7') == False]
+df[df['Core config'].str.contains(u'^[2-9]\u00d7') == False]
+# filter out if Model ends in [xX]2
+df[df['Model'].str.contains('[xX]2$') == False]
+# filter out transistors that ends in x2
+df[df['Transistors (million)'].str.contains(u'\u00d7[2-9]$') == False]
+
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
+    # the next three pick the base clock from base (boost)
     tomerge = 'Processing power (GFLOPS) %s precision (Boost)' % prec
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
         df[tomerge].str.split(' ').str[0])
@@ -94,6 +119,7 @@ for prec in ['Double', 'Single', 'Half']:
             df[tomerge].str.split(' ').str[0])
         df.drop(tomerge, axis=1, inplace=True)
 
+    # convert TFLOPS to GFLOPS
     tomerge = 'Processing power (TFLOPS) %s (Boost)' % prec
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
         pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
@@ -102,6 +128,21 @@ for prec in ['Double', 'Single', 'Half']:
     df = df.rename(columns={'Processing power (GFLOPS) %s precision' % prec:
                             '%s-precision GFLOPS' % prec})
 
+# split out 'transistors die size'
+# example: u'292\u00d7106 59 mm2'
+for exponent in [u'\u00d7106', u'\u00d7109', 'B']:
+    dftds = df['Transistors Die Size'].str.extract(u'^([\d\.]+)%s (\d+) mm2' % exponent,
+                                                   expand=True)
+    if exponent == u'\u00d7106':
+        df['Transistors (million)'] = df['Transistors (million)'].fillna(
+            pd.to_numeric(dftds[0], errors='coerce'))
+    if exponent == u'\u00d7109' or exponent == 'B':
+        df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
+            pd.to_numeric(dftds[0], errors='coerce'))
+    df['Die size (mm2)'] = df['Die size (mm2)'].fillna(
+        pd.to_numeric(dftds[1], errors='coerce'))
+
+
 # merge transistor counts
 df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
     pd.to_numeric(df['Transistors (million)'], errors='coerce') / 1000.0)
@@ -109,6 +150,7 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
 # extract shader (processor) counts
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 df = merge(df, 'Pixel/unified shader count', 'Stream processors')
+df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
 
 for col in ['Memory Bandwidth (GB/s)', 'TDP (Watts)']:
     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -229,10 +271,10 @@ template = """<!DOCTYPE html>
 <html>
 <head>
   <!-- Import Vega 3 & Vega-Lite 2 js (does not have to be from cdn) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.0-rc5/vega.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.10/vega-lite.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.0-rc7/vega.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.11/vega-lite.js"></script>
   <!-- Import vega-embed -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.19/vega-embed.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.20/vega-embed.js"></script>
   <title>{title}</title>
 
   <style media="screen">
@@ -282,6 +324,8 @@ for (chart, title) in [(mb, "Memory Bandwidth over Time"),
         f.write(template.format(spec=json.dumps(spec), title=title))
         # f.write(chart.from_json(spec_str).to_html(
         # title=title, template=template))
+        save(chart, df=pd.DataFrame(), plotname=title, outputdir=outputdir,
+             formats=['pdf'])
     readme += "- [%s](plots/%s.html)\n" % (title, title)
 
 with open(os.path.join(outputdir, '../README.md'), 'w') as f:
