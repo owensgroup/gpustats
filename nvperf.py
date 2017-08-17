@@ -70,24 +70,22 @@ df = merge(df, 'SM count', 'SMX count')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS)')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
-           'Processing power (GFLOPS) Single')
-df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS) Single precision (MAD+MUL)',
            replaceNoWithNaN=True)
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS) Single precision (MAD or FMA)',
            replaceNoWithNaN=True)
 df = merge(df, 'Processing power (GFLOPS) Double precision',
-           'Processing power (GFLOPS) Double')
-df = merge(df, 'Processing power (GFLOPS) Double precision',
            'Processing power (GFLOPS) Double precision (FMA)',
            replaceNoWithNaN=True)
 df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
+df = merge(df, 'Memory Bandwidth (GB/s)', 'Memory Band- width (GB/s)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) GPU only')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
+df = merge(df, 'TDP (Watts)', 'TBP (W)')
 df = merge(df, 'Model', 'Model (Codename)')
 df = merge(df, 'Model', 'Model: Mobility Radeon')
 
@@ -102,16 +100,17 @@ df = df[~df['Transistors (million)'].str.match(u'\u00d7[2-9]$', na=False)]
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
-    # the next three pick the base clock from base (boost)
+    # the next four pick the base clock from base (boost)
     tomerge = 'Processing power (GFLOPS) %s precision (Boost)' % prec
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
         df[tomerge].str.split(' ').str[0])
     df.drop(tomerge, axis=1, inplace=True)
 
-    tomerge = 'Processing power (GFLOPS) %s (Boost)' % prec
-    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
-        df[tomerge].str.split(' ').str[0])
-    df.drop(tomerge, axis=1, inplace=True)
+    if prec != 'Half':
+        tomerge = 'Processing power (GFLOPS) %s (Boost)' % prec
+        df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
+            df[tomerge].str.split(' ').str[0])
+        df.drop(tomerge, axis=1, inplace=True)
 
     if prec == 'Single':
         tomerge = 'Processing power (GFLOPS) (Boost)'
@@ -119,8 +118,13 @@ for prec in ['Double', 'Single', 'Half']:
             df[tomerge].str.split(' ').str[0])
         df.drop(tomerge, axis=1, inplace=True)
 
+    tomerge = 'Processing power (GFLOPS) %s' % prec
+    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
+        df[tomerge].str.split(' ').str[0])
+    df.drop(tomerge, axis=1, inplace=True)
+
     # convert TFLOPS to GFLOPS
-    tomerge = 'Processing power (TFLOPS) %s (Boost)' % prec
+    tomerge = 'Processing power (TFLOPS) %s' % prec
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
         pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
     df.drop(tomerge, axis=1, inplace=True)
@@ -163,6 +167,8 @@ df['FLOPS/Watt'] = pd.to_numeric(df[
 
 # remove references from end of model names
 df['Model'] = df['Model'].str.replace(r'(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$', '')
+# then take 'em out of the middle too
+df['Model'] = df['Model'].str.replace(r'\[\d+\]', '')
 
 # mark mobile processors
 df['GPU Type'] = np.where(
@@ -267,7 +273,7 @@ sh = Chart(df[~df['Model'].str.match('^FirePro [MW]')]).mark_point().encode(
                 ),
 )
 
-df.to_csv("/tmp/gpu.csv", encoding="utf-8")
+# df.to_csv("/tmp/gpu.csv", encoding="utf-8")
 
 template = """<!DOCTYPE html>
 <html>
