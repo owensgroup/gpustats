@@ -92,13 +92,13 @@ df = merge(df, 'Model', 'Model (Codename)')
 df = merge(df, 'Model', 'Model: Mobility Radeon')
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
-df[df['Chips'].str.contains(u'^[2-9]\u00d7') == False]
-df[df['Code name'].str.contains(u'^[2-9]\u00d7') == False]
-df[df['Core config'].str.contains(u'^[2-9]\u00d7') == False]
+df = df[~df['Chips'].str.match(u'^[2-9]\u00d7', na=False)]
+df = df[~df['Code name'].str.match(u'^[2-9]\u00d7', na=False)]
+df = df[~df['Core config'].str.match(u'^[2-9]\u00d7', na=False)]
 # filter out if Model ends in [xX]2
-df[df['Model'].str.contains('[xX]2$') == False]
+df = df[~df['Model'].str.match('[xX]2$', na=False)]
 # filter out transistors that ends in x2
-df[df['Transistors (million)'].str.contains(u'\u00d7[2-9]$') == False]
+df = df[~df['Transistors (million)'].str.match(u'\u00d7[2-9]$', na=False)]
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
@@ -254,7 +254,9 @@ fpw = Chart(df).mark_point().encode(
                 ),
 )
 
-sh = Chart(df).mark_point().encode(
+# remove FirePro Mobile chips from this chart b/c their "core config" is
+# so messed up on the wikipedia page
+sh = Chart(df[~df['Model'].str.match('^FirePro [MW]')]).mark_point().encode(
     x='Launch:T',
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
