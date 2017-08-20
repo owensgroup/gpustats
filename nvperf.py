@@ -30,8 +30,8 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
     html = re.sub(u'\xa0', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
-    with open('/tmp/%s.html' % vendor, 'w') as f:
-        f.write(html.encode('utf8'))
+    # with open('/tmp/%s.html' % vendor, 'w') as f:
+    #     f.write(html.encode('utf8'))
 
     dfs = pd.read_html(html, match='Launch', parse_dates=True)
     for df in dfs:
@@ -97,6 +97,14 @@ df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
 df = merge(df, 'Model', 'Model (Codename)')
 df = merge(df, 'Model', 'Model: Mobility Radeon')
+df = merge(df, 'Core clock (MHz)', 'Clock speeds Base core clock (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Core Clock (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock speed Core (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock speed Average (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock rate Core (MHz) (Boost)')
+# df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
+# uncomment this once AMD page gets refreshed
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
 df = df[~df['Chips'].str.match(u'^[2-9]\u00d7', na=False)]
@@ -155,6 +163,8 @@ for exponent in [u'\u00d7106', u'\u00d7109', 'B']:
     df['Die size (mm2)'] = df['Die size (mm2)'].fillna(
         pd.to_numeric(dftds[1], errors='coerce'))
 
+# some AMD chips have core/boost in same entry, take first number
+df['Core clock (MHz)'] = df['Core clock (MHz)'].str.split(' ').str[0]
 
 # merge transistor counts
 df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
@@ -277,6 +287,15 @@ fpw = Chart(df).mark_point().encode(
                 ),
 )
 
+clk = Chart(df).mark_point().encode(
+    x='Launch:T',
+    y='Core clock (MHz):Q',
+    shape='GPU Type',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
+)
+
 # only plot chips with actual feature sizes
 fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
@@ -374,10 +393,11 @@ for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (die, "Die Size over Time"),
                        (xt, "Transistor Count over Time"),
                        (fab, "Feature size over Time"),
-                       (ai, "Arithmetic Intensity over Time"),
+                       (clk, "Clock rate over Time"),
                        (fpw, "FLOPS per Watt over Time"),
                        (fpwsp, "FLOPS per Watt vs. Peak Processing Power"),
                        (fpwbw, "FLOPS per Watt vs. Memory Bandwidth"),
+                       (ai, "Arithmetic Intensity over Time"),
                        (aisp, "Arithmetic Intensity vs. Peak Processing Power"),
                        (aibw, "Arithmetic Intensity vs. Memory Bandwidth"),
                        ]:
