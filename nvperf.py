@@ -18,6 +18,8 @@ data = {
             }
 }
 
+referencesAtEnd = r'(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$'
+
 for vendor in ['NVIDIA', 'AMD']:
     # requests.get handles https
     html = requests.get(data[vendor]['url']).text
@@ -26,6 +28,8 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(
         r'<span [^>]*style="display:none[^>]*>([^<]+)</span>', '', html)
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
+    html = re.sub(u'\xa0', ' ', html)  # non-breaking space -> ' '
+    html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
     with open('/tmp/%s.html' % vendor, 'w') as f:
         f.write(html.encode('utf8'))
 
@@ -36,7 +40,6 @@ for vendor in ['NVIDIA', 'AMD']:
         # Get rid of 'Unnamed' column names
         df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
                       for col in df.columns.values]
-
         # If a column-name word ends in a number or number,comma,number, delete
         # it
         df.columns = [' '.join([re.sub('[\d,]+$', '', word) for word in col.split()])
@@ -45,7 +48,14 @@ for vendor in ['NVIDIA', 'AMD']:
         # where 'x' is a lower-case letter or number, delete it
         df.columns = [' '.join([re.sub(r'(?:\[[a-z0-9]+\])+$', '', word) for word in col.split()])
                       for col in df.columns.values]
+        # Get rid of hyphenation in column names
+        df.columns = [col.replace('- ', '') for col in df.columns.values]
+
         df['Vendor'] = vendor
+
+        # make sure Launch is a string (dtype=object) before parsing it
+        df['Launch'] = df['Launch'].apply(lambda x: str(x))
+        df['Launch'] = df['Launch'].str.replace(referencesAtEnd, '')
         df['Launch'] = df['Launch'].apply(
             lambda x: pd.to_datetime(x,
                                      infer_datetime_format=True,
@@ -80,7 +90,6 @@ df = merge(df, 'Processing power (GFLOPS) Double precision',
            replaceNoWithNaN=True)
 df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
-df = merge(df, 'Memory Bandwidth (GB/s)', 'Memory Band- width (GB/s)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) GPU only')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
@@ -152,21 +161,27 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
     pd.to_numeric(df['Transistors (million)'], errors='coerce') / 1000.0)
 
 # extract shader (processor) counts
+df = merge(df, 'Core config', 'Core Config')
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 df = merge(df, 'Pixel/unified shader count', 'Stream processors')
 df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
 
-for col in ['Memory Bandwidth (GB/s)', 'TDP (Watts)']:
+# merge in AMD fab stats
+df['Architecture (Fab) (extracted)'] = df[
+    'Architecture (Fab)'].str.extract(r'\((\d+) nm\)', expand=False)
+df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
+
+for col in ['Memory Bandwidth (GB/s)', 'TDP (Watts)', 'Fab (nm)']:
     df[col] = pd.to_numeric(df[col], errors='coerce')
 
 # compute arithmetic intensity and FLOPS/Watt
 df['Arithmetic intensity (FLOP/B)'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['Memory Bandwidth (GB/s)'], errors='coerce')
-df['FLOPS/Watt'] = pd.to_numeric(df[
+df['Single precision FLOPS/Watt'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (Watts)'], errors='coerce')
 
 # remove references from end of model names
-df['Model'] = df['Model'].str.replace(r'(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$', '')
+df['Model'] = df['Model'].str.replace(referencesAtEnd, '')
 # then take 'em out of the middle too
 df['Model'] = df['Model'].str.replace(r'\[\d+\]', '')
 
@@ -181,7 +196,7 @@ df['GPU Type'] = np.where(
 colormap = Scale(domain=['AMD', 'NVIDIA'],
                  range=['#ff0000', '#76b900'])
 
-mb = Chart(df).mark_point().encode(
+bw = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
@@ -223,6 +238,7 @@ die = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
+    shape='GPU Type',
 )
 xt = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -232,6 +248,7 @@ xt = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
+    shape='GPU Type',
 )
 fab = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -253,11 +270,30 @@ ai = Chart(df).mark_point().encode(
 
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
-    y='FLOPS/Watt:Q',
+    y='Single precision FLOPS/Watt:Q',
     shape='GPU Type',
     color=Color('Vendor',
                 scale=colormap,
                 ),
+)
+
+# only plot chips with actual feature sizes
+fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
+    x=X('Single-precision GFLOPS:Q',
+        scale=Scale(type='log'),
+        ),
+    y='Arithmetic intensity (FLOP/B):Q',
+    shape='Vendor',
+    color='Fab (nm):N',
+)
+
+fpwbw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
+    x=X('Memory Bandwidth (GB/s):Q',
+        scale=Scale(type='log'),
+        ),
+    y='Arithmetic intensity (FLOP/B):Q',
+    shape='Vendor',
+    color='Fab (nm):N',
 )
 
 # remove FirePro Mobile chips from this chart b/c their "core config" is
@@ -313,15 +349,18 @@ template = """<!DOCTYPE html>
 readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units) and [Wikipedia's AMD GPUs page](https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units).\n\n"
 
 outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
-for (chart, title) in [(mb, "Memory Bandwidth over Time"),
+for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (pr, "Processing Power over Time"),
                        (sm, "SM count over Time"),
+                       (sh, "Shader count over Time"),
                        (die, "Die Size over Time"),
-                       (xt, "Transistor Count over Time",),
+                       (xt, "Transistor Count over Time"),
                        (fab, "Feature size over Time"),
                        (ai, "Arithmetic Intensity over Time"),
                        (fpw, "FLOPS per Watt over Time"),
-                       (sh, "Shader count over Time")]:
+                       (fpwsp, "FLOPS per Watt vs. Peak Processing Power"),
+                       (fpwbw, "FLOPS per Watt vs. Memory Bandwidth"),
+                       ]:
     # save html
     # print chart.to_dict()
     with open(os.path.join(outputdir, title + '.html'), 'w') as f:
