@@ -13,3 +13,5 @@ Data sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/L
 - [FLOPS per Watt over Time](plots/FLOPS per Watt over Time.html)
 - [FLOPS per Watt vs. Peak Processing Power](plots/FLOPS per Watt vs. Peak Processing Power.html)
 - [FLOPS per Watt vs. Memory Bandwidth](plots/FLOPS per Watt vs. Memory Bandwidth.html)
+- [Arithmetic Intensity vs. Peak Processing Power](plots/Arithmetic Intensity vs. Peak Processing Power.html)
+- [Arithmetic Intensity vs. Memory Bandwidth](plots/Arithmetic Intensity vs. Memory Bandwidth.html)

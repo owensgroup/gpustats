@@ -282,12 +282,30 @@ fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
         scale=Scale(type='log'),
         ),
-    y='Arithmetic intensity (FLOP/B):Q',
+    y='Single precision FLOPS/Watt:Q',
     shape='Vendor',
     color='Fab (nm):N',
 )
 
 fpwbw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
+    x=X('Memory Bandwidth (GB/s):Q',
+        scale=Scale(type='log'),
+        ),
+    y='Single precision FLOPS/Watt:Q',
+    shape='Vendor',
+    color='Fab (nm):N',
+)
+
+aisp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
+    x=X('Single-precision GFLOPS:Q',
+        scale=Scale(type='log'),
+        ),
+    y='Arithmetic intensity (FLOP/B):Q',
+    shape='Vendor',
+    color='Fab (nm):N',
+)
+
+aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
@@ -360,6 +378,8 @@ for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (fpw, "FLOPS per Watt over Time"),
                        (fpwsp, "FLOPS per Watt vs. Peak Processing Power"),
                        (fpwbw, "FLOPS per Watt vs. Memory Bandwidth"),
+                       (aisp, "Arithmetic Intensity vs. Peak Processing Power"),
+                       (aibw, "Arithmetic Intensity vs. Memory Bandwidth"),
                        ]:
     # save html
     # print chart.to_dict()
