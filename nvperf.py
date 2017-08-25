@@ -102,8 +102,8 @@ df = merge(df, 'Core clock (MHz)', 'Core Clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speed Core (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speed Average (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
-df = merge(df, 'Core clock (MHz)', 'Clock rate Core (MHz) (Boost)')
-# df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
+df = merge(df, 'Core config', 'Core Config')
 # uncomment this once AMD page gets refreshed
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
@@ -122,18 +122,6 @@ for prec in ['Double', 'Single', 'Half']:
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
         df[tomerge].str.split(' ').str[0])
     df.drop(tomerge, axis=1, inplace=True)
-
-    if prec != 'Half':
-        tomerge = 'Processing power (GFLOPS) %s (Boost)' % prec
-        df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
-            df[tomerge].str.split(' ').str[0])
-        df.drop(tomerge, axis=1, inplace=True)
-
-    if prec == 'Single':
-        tomerge = 'Processing power (GFLOPS) (Boost)'
-        df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
-            df[tomerge].str.split(' ').str[0])
-        df.drop(tomerge, axis=1, inplace=True)
 
     tomerge = 'Processing power (GFLOPS) %s' % prec
     df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
@@ -171,7 +159,6 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
     pd.to_numeric(df['Transistors (million)'], errors='coerce') / 1000.0)
 
 # extract shader (processor) counts
-df = merge(df, 'Core config', 'Core Config')
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 df = merge(df, 'Pixel/unified shader count', 'Stream processors')
 df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
