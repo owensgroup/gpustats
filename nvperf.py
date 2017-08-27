@@ -30,6 +30,8 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
     html = re.sub(u'\xa0', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
+    html = re.sub(u'\u2012', '-', html)  # figure dash -> '-'
+    html = re.sub(u'\u2013', '-', html)  # en-dash -> '-'
     # with open('/tmp/%s.html' % vendor, 'w') as f:
     #     f.write(html.encode('utf8'))
 
@@ -104,38 +106,37 @@ df = merge(df, 'Core clock (MHz)', 'Clock speed Average (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
 df = merge(df, 'Core config', 'Core Config')
-# uncomment this once AMD page gets refreshed
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
-df = df[~df['Chips'].str.match(u'^[2-9]\u00d7', na=False)]
-df = df[~df['Code name'].str.match(u'^[2-9]\u00d7', na=False)]
-df = df[~df['Core config'].str.match(u'^[2-9]\u00d7', na=False)]
+df = df[~df['Chips'].str.contains(ur'^[2-9]\u00d7', re.UNICODE, na=False)]
+df = df[~df['Code name'].str.contains(ur'^[2-9]\u00d7', re.UNICODE, na=False)]
+df = df[~df['Core config'].str.contains(
+    ur'^[2-9]\u00d7', re.UNICODE, na=False)]
 # filter out if Model ends in [xX]2
-df = df[~df['Model'].str.match('[xX]2$', na=False)]
-# filter out transistors that ends in x2
-df = df[~df['Transistors (million)'].str.match(u'\u00d7[2-9]$', na=False)]
+df = df[~df['Model'].str.contains('[xX]2$', na=False)]
+# filter out {transistors, die size} that end in x2
+df = df[~df['Transistors (million)'].str.contains(
+    ur'\u00d7[2-9]$', re.UNICODE, na=False)]
+df = df[~df['Die size (mm2)'].str.contains(
+    ur'\u00d7[2-9]$', re.UNICODE, na=False)]
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
-    # the next four pick the base clock from base (boost)
-    tomerge = 'Processing power (GFLOPS) %s precision (Boost)' % prec
-    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
-        df[tomerge].str.split(' ').str[0])
-    df.drop(tomerge, axis=1, inplace=True)
+    col = 'Processing power (GFLOPS) %s precision' % prec
+    df = merge(df, col, 'Processing power (GFLOPS) %s precision (Boost)' % prec)
+    df = merge(df, col, 'Processing power (GFLOPS) %s' % prec)
 
-    tomerge = 'Processing power (GFLOPS) %s' % prec
-    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
-        df[tomerge].str.split(' ').str[0])
-    df.drop(tomerge, axis=1, inplace=True)
+    # pick the first number we see as the actual number
+    df[col] = df[col].astype(str)
+    df[col] = df[col].str.extract(r'^([\d\.]+)', expand=False)
 
     # convert TFLOPS to GFLOPS
     tomerge = 'Processing power (TFLOPS) %s' % prec
-    df['Processing power (GFLOPS) %s precision' % prec] = df['Processing power (GFLOPS) %s precision' % prec].fillna(
+    df[col] = df[col].fillna(
         pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
     df.drop(tomerge, axis=1, inplace=True)
 
-    df = df.rename(columns={'Processing power (GFLOPS) %s precision' % prec:
-                            '%s-precision GFLOPS' % prec})
+    df = df.rename(columns={col: '%s-precision GFLOPS' % prec})
 
 # split out 'transistors die size'
 # example: u'292\u00d7106 59 mm2'
@@ -322,7 +323,7 @@ aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
 
 # remove FirePro Mobile chips from this chart b/c their "core config" is
 # so messed up on the wikipedia page
-sh = Chart(df[~df['Model'].str.match('^FirePro [MW]')]).mark_point().encode(
+sh = Chart(df[~df['Model'].str.contains('^FirePro [MW]')]).mark_point().encode(
     x='Launch:T',
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
