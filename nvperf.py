@@ -32,6 +32,10 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
     html = re.sub(u'\u2012', '-', html)  # figure dash -> '-'
     html = re.sub(u'\u2013', '-', html)  # en-dash -> '-'
+    html = re.sub(r'mm<sup>2</sup>', 'mm2', html)  # mm^2 -> mm2
+    html = re.sub(u'\u00d710<sup>6</sup>', u'\u00d7106', html)  # 10^6 -> 106
+    html = re.sub(u'\u00d710<sup>9</sup>', u'\u00d7109', html)  # 10^9 -> 109
+    html = re.sub(r'<sup>\d+</sup>', '', html)  # delete footnotes
     # with open('/tmp/%s.html' % vendor, 'w') as f:
     #     f.write(html.encode('utf8'))
 
@@ -106,6 +110,8 @@ df = merge(df, 'Core clock (MHz)', 'Clock speed Average (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
 df = merge(df, 'Core config', 'Core Config')
+df = merge(df, 'Memory Bus type', 'Memory RAM type')
+df = merge(df, 'Memory Bus type', 'Memory configuration DRAM type')
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
 df = df[~df['Chips'].str.contains(ur'^[2-9]\u00d7', re.UNICODE, na=False)]
@@ -155,6 +161,14 @@ for exponent in [u'\u00d7106', u'\u00d7109', 'B']:
 # some AMD chips have core/boost in same entry, take first number
 df['Core clock (MHz)'] = df['Core clock (MHz)'].str.split(' ').str[0]
 
+# collate memory bus type and take first word only, removing chud as
+# appropriate
+df = merge(df, 'Memory Bus type', 'Memory Bus type & width (bit)')
+df['Memory Bus type'] = df['Memory Bus type'].str.split(' ').str[0]
+df['Memory Bus type'] = df['Memory Bus type'].str.split(',').str[0]
+df['Memory Bus type'] = df['Memory Bus type'].str.split('/').str[0]
+df['Memory Bus type'] = df['Memory Bus type'].str.split('[').str[0]
+
 # merge transistor counts
 df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
     pd.to_numeric(df['Transistors (million)'], errors='coerce') / 1000.0)
@@ -199,10 +213,8 @@ bw = Chart(df).mark_point().encode(
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
-    color=Color('Vendor',
-                scale=colormap,
-                ),
-    shape='GPU Type',
+    color='Memory Bus type',
+    shape='Vendor',
 )
 pr = Chart(pd.melt(df,
                    id_vars=['Launch', 'Model', 'GPU Type', 'Vendor'],
@@ -215,10 +227,8 @@ pr = Chart(pd.melt(df,
     y=Y('Processing power (GFLOPS):Q',
         scale=Scale(type='log'),
         ),
-    shape='Datatype',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    shape='Vendor',
+    color='Datatype',
 )
 
 sm = Chart(df).mark_point().encode(
@@ -340,8 +350,8 @@ template = """<!DOCTYPE html>
 <html>
 <head>
   <!-- Import Vega 3 & Vega-Lite 2 js (does not have to be from cdn) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.0-rc7/vega.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.11/vega-lite.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.2/vega.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.13/vega-lite.js"></script>
   <!-- Import vega-embed -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.20/vega-embed.js"></script>
   <title>{title}</title>
