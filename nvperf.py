@@ -333,9 +333,7 @@ aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     color='Fab (nm):N',
 )
 
-# remove FirePro Mobile chips from this chart b/c their "core config" is
-# so messed up on the wikipedia page
-sh = Chart(df[~df['Model'].str.contains('^FirePro [MW]')]).mark_point().encode(
+sh = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
