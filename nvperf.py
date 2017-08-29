@@ -111,6 +111,7 @@ df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
 df = merge(df, 'Core config', 'Core Config')
 df = merge(df, 'Memory Bus type', 'Memory RAM type')
+df = merge(df, 'Memory Bus type', 'Memory Type')
 df = merge(df, 'Memory Bus type', 'Memory configuration DRAM type')
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
@@ -168,6 +169,7 @@ df['Memory Bus type'] = df['Memory Bus type'].str.split(' ').str[0]
 df['Memory Bus type'] = df['Memory Bus type'].str.split(',').str[0]
 df['Memory Bus type'] = df['Memory Bus type'].str.split('/').str[0]
 df['Memory Bus type'] = df['Memory Bus type'].str.split('[').str[0]
+df.loc[df['Memory Bus type'] == 'EDO', 'Memory Bus type'] = 'EDO VRAM'
 
 # merge transistor counts
 df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
