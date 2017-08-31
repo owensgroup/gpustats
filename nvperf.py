@@ -102,6 +102,8 @@ df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
 df = merge(df, 'Model', 'Model (Codename)')
+# df = merge(df, 'Model', 'Chip (Device)')
+# replace when AMD page updated
 df = merge(df, 'Model', 'Model: Mobility Radeon')
 df = merge(df, 'Core clock (MHz)', 'Clock speeds Base core clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock (MHz)')
@@ -113,6 +115,7 @@ df = merge(df, 'Core config', 'Core Config')
 df = merge(df, 'Memory Bus type', 'Memory RAM type')
 df = merge(df, 'Memory Bus type', 'Memory Type')
 df = merge(df, 'Memory Bus type', 'Memory configuration DRAM type')
+df = merge(df, 'Release Price (USD)', 'Release price (USD) MSRP')
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
 df = df[~df['Chips'].str.contains(ur'^[2-9]\u00d7', re.UNICODE, na=False)]
@@ -185,7 +188,15 @@ df['Architecture (Fab) (extracted)'] = df[
     'Architecture (Fab)'].str.extract(r'\((\d+) nm\)', expand=False)
 df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
 
-for col in ['Memory Bandwidth (GB/s)', 'TDP (Watts)', 'Fab (nm)']:
+# take first number from "release price" after deleting $ and ,
+df['Release Price (USD)'] = df['Release Price (USD)'].str.replace(
+    r'[,\$]', '').str.split(' ').str[0]
+
+for col in ['Memory Bandwidth (GB/s)',
+            'TDP (Watts)',
+            'Fab (nm)',
+            'Release Price (USD)',
+            ]:
     df[col] = pd.to_numeric(df[col], errors='coerce')
 
 # compute arithmetic intensity and FLOPS/Watt
@@ -193,6 +204,8 @@ df['Arithmetic intensity (FLOP/B)'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['Memory Bandwidth (GB/s)'], errors='coerce')
 df['Single precision FLOPS/Watt'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (Watts)'], errors='coerce')
+df['Single precision FLOPS/USD'] = pd.to_numeric(df[
+    'Single-precision GFLOPS'], errors='coerce') / df['Release Price (USD)']
 
 # remove references from end of model names
 df['Model'] = df['Model'].str.replace(referencesAtEnd, '')
@@ -296,6 +309,24 @@ clk = Chart(df).mark_point().encode(
                 ),
 )
 
+cost = Chart(df).mark_point().encode(
+    x='Launch:T',
+    y='Release Price (USD):Q',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
+    shape='GPU Type',
+)
+
+fperdollar = Chart(df).mark_point().encode(
+    x='Launch:T',
+    y='Single precision FLOPS/USD:Q',
+    color=Color('Vendor',
+                scale=colormap,
+                ),
+    shape='GPU Type',
+)
+
 # only plot chips with actual feature sizes
 fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
@@ -392,6 +423,8 @@ for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (xt, "Transistor Count over Time"),
                        (fab, "Feature size over Time"),
                        (clk, "Clock rate over Time"),
+                       (cost, "Release price over Time"),
+                       (fperdollar, "FLOPS per Dollar over Time"),
                        (fpw, "FLOPS per Watt over Time"),
                        (fpwsp, "FLOPS per Watt vs. Peak Processing Power"),
                        (fpwbw, "FLOPS per Watt vs. Memory Bandwidth"),
