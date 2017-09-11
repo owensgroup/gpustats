@@ -105,12 +105,14 @@ df = merge(df, 'Model', 'Model (Codename)')
 # df = merge(df, 'Model', 'Chip (Device)')
 # replace when AMD page updated
 df = merge(df, 'Model', 'Model: Mobility Radeon')
+df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speeds Base core clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock rate Core (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speed Core (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speed Average (MHz)')
-df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock rate (MHz) Core (MHz)')
 df = merge(df, 'Core config', 'Core Config')
 df = merge(df, 'Memory Bus type', 'Memory RAM type')
 df = merge(df, 'Memory Bus type', 'Memory Type')
@@ -163,7 +165,8 @@ for exponent in [u'\u00d7106', u'\u00d7109', 'B']:
         pd.to_numeric(dftds[1], errors='coerce'))
 
 # some AMD chips have core/boost in same entry, take first number
-df['Core clock (MHz)'] = df['Core clock (MHz)'].str.split(' ').str[0]
+df['Core clock (MHz)'] = df['Core clock (MHz)'].astype(
+    str).str.split(' ').str[0]
 
 # collate memory bus type and take first word only, removing chud as
 # appropriate
@@ -382,7 +385,7 @@ template = """<!DOCTYPE html>
 <head>
   <!-- Import Vega 3 & Vega-Lite 2 js (does not have to be from cdn) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.2/vega.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.13/vega-lite.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.19/vega-lite.js"></script>
   <!-- Import vega-embed -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.20/vega-embed.js"></script>
   <title>{title}</title>
