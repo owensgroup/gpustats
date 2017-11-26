@@ -135,7 +135,8 @@ df = df[~df['Die size (mm2)'].str.contains(
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
     col = 'Processing power (GFLOPS) %s precision' % prec
-    df = merge(df, col, 'Processing power (GFLOPS) %s precision (Boost)' % prec)
+    df = merge(
+        df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)' % prec)
     df = merge(df, col, 'Processing power (GFLOPS) %s' % prec)
 
     # pick the first number we see as the actual number
@@ -383,10 +384,8 @@ sh = Chart(df).mark_point().encode(
 template = """<!DOCTYPE html>
 <html>
 <head>
-  <!-- Import Vega 3 & Vega-Lite 2 js (does not have to be from cdn) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.2/vega.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-beta.19/vega-lite.js"></script>
-  <!-- Import vega-embed -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-rc2/vega-lite.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.20/vega-embed.js"></script>
   <title>{title}</title>
 
