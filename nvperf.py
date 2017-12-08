@@ -187,6 +187,13 @@ df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 df = merge(df, 'Pixel/unified shader count', 'Stream processors')
 df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
 
+# GF 10xx SM counts
+df['SM count (extracted)'] = df[
+    'Core config (SM/SMP/ Streaming Multiprocessor)'].str.extract(r'\((\d+)\)',
+                                                                  expand=False)
+df = merge(df, 'SM count', 'SM count (extracted)')
+
+
 # merge in AMD fab stats
 df['Architecture (Fab) (extracted)'] = df[
     'Architecture (Fab)'].str.extract(r'\((\d+) nm\)', expand=False)
