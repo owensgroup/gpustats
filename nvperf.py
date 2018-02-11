@@ -12,10 +12,12 @@ from altair import *
 from fileops import save
 
 data = {
-    'NVIDIA': {'url': 'https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units',
-               },
-    'AMD': {'url': 'https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units',
-            }
+    'NVIDIA': {
+        'url': 'https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units'
+    },
+    'AMD': {
+        'url': 'https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units',
+    }
 }
 
 referencesAtEnd = r'(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$'
@@ -81,8 +83,6 @@ def merge(df, dst, src, replaceNoWithNaN=False):
 
 # merge related columns
 df = merge(df, 'Model', 'Model Units')
-df = merge(df, 'SM count', 'SMM count')
-df = merge(df, 'SM count', 'SMX count')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
            'Processing power (GFLOPS)')
 df = merge(df, 'Processing power (GFLOPS) Single precision',
@@ -135,6 +135,9 @@ df = df[~df['Die size (mm2)'].str.contains(
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
     col = 'Processing power (GFLOPS) %s precision' % prec
+    if prec != 'Half':
+        df = merge(
+            df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 2.0)' % prec)
     df = merge(
         df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)' % prec)
     df = merge(df, col, 'Processing power (GFLOPS) %s' % prec)
@@ -144,7 +147,7 @@ for prec in ['Double', 'Single', 'Half']:
     df[col] = df[col].str.extract(r'^([\d\.]+)', expand=False)
 
     # convert TFLOPS to GFLOPS
-    tomerge = 'Processing power (TFLOPS) %s' % prec
+    tomerge = 'Processing power (TFLOPS) %s Prec.' % prec
     df[col] = df[col].fillna(
         pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
     df.drop(tomerge, axis=1, inplace=True)
@@ -187,11 +190,15 @@ df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 df = merge(df, 'Pixel/unified shader count', 'Stream processors')
 df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
 
+df['SM count (extracted)'] = df['Core config'].str.extract(r'\((\d+ SM[MX])\)',
+                                                           expand=False)
+df = merge(df, 'SM count', 'SM count (extracted)')
 # GF 10xx SM counts
 df['SM count (extracted)'] = df[
     'Core config (SM/SMP/ Streaming Multiprocessor)'].str.extract(r'\((\d+)\)',
                                                                   expand=False)
 df = merge(df, 'SM count', 'SM count (extracted)')
+df = merge(df, 'SM count', 'SMX count')
 
 
 # merge in AMD fab stats
