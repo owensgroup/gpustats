@@ -193,11 +193,15 @@ df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
 df['SM count (extracted)'] = df['Core config'].str.extract(r'\((\d+ SM[MX])\)',
                                                            expand=False)
 df = merge(df, 'SM count', 'SM count (extracted)')
-# GF 10xx SM counts
-df['SM count (extracted)'] = df[
-    'Core config (SM/SMP/ Streaming Multiprocessor)'].str.extract(r'\((\d+)\)',
-                                                                  expand=False)
-df = merge(df, 'SM count', 'SM count (extracted)')
+for smcount in [
+        # GF 10xx SM counts
+        'Core config (SM/SMP/ Streaming Multiprocessor)',
+        # Volta series
+        'Core config CUDA cores (SM/SMP/Streaming Multiprocessor) ',
+]:
+    df['SM count (extracted)'] = df[smcount].str.extract(r'\((\d+)\)',
+                                                         expand=False)
+    df = merge(df, 'SM count', 'SM count (extracted)')
 df = merge(df, 'SM count', 'SMX count')
 
 
