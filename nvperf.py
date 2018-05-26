@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import pandas as pd
 import numpy as np
@@ -10,6 +10,8 @@ import json
 from altair import *
 
 from fileops import save
+
+from collections import Counter
 
 data = {
     'NVIDIA': {
@@ -30,15 +32,15 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(
         r'<span [^>]*style="display:none[^>]*>([^<]+)</span>', '', html)
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
-    html = re.sub(u'\xa0', ' ', html)  # non-breaking space -> ' '
+    html = re.sub('\xa0', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
-    html = re.sub(u'\u2012', '-', html)  # figure dash -> '-'
-    html = re.sub(u'\u2013', '-', html)  # en-dash -> '-'
+    html = re.sub('\u2012', '-', html)  # figure dash -> '-'
+    html = re.sub('\u2013', '-', html)  # en-dash -> '-'
     html = re.sub(r'mm<sup>2</sup>', 'mm2', html)  # mm^2 -> mm2
-    html = re.sub(u'\u00d710<sup>6</sup>', u'\u00d7106', html)  # 10^6 -> 106
-    html = re.sub(u'\u00d710<sup>9</sup>', u'\u00d7109', html)  # 10^9 -> 109
+    html = re.sub('\u00d710<sup>6</sup>', '\u00d7106', html)  # 10^6 -> 106
+    html = re.sub('\u00d710<sup>9</sup>', '\u00d7109', html)  # 10^9 -> 109
     html = re.sub(r'<sup>\d+</sup>', '', html)  # delete footnotes
-    # with open('/tmp/%s.html' % vendor, 'w') as f:
+    # with open('/tmp/%s.html' % vendor, 'wb') as f:
     #     f.write(html.encode('utf8'))
 
     dfs = pd.read_html(html, match='Launch', parse_dates=True)
@@ -68,6 +70,10 @@ for vendor in ['NVIDIA', 'AMD']:
             lambda x: pd.to_datetime(x,
                                      infer_datetime_format=True,
                                      errors='coerce'))
+        # if we have duplicate column names, we will see them here
+        # pd.concat will fail if so
+        if ([c for c in Counter(df.columns).items() if c[1] > 1]):
+            print(df)
 
     data[vendor]['dfs'] = dfs
 
@@ -80,6 +86,7 @@ def merge(df, dst, src, replaceNoWithNaN=False):
     df[dst] = df[dst].fillna(df[src])
     df.drop(src, axis=1, inplace=True)
     return df
+
 
 # merge related columns
 df = merge(df, 'Model', 'Model Units')
@@ -96,7 +103,6 @@ df = merge(df, 'Processing power (GFLOPS) Double precision',
            replaceNoWithNaN=True)
 df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
-df = merge(df, 'TDP (Watts)', 'TDP (Watts) GPU only')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
@@ -120,17 +126,17 @@ df = merge(df, 'Memory Bus type', 'Memory configuration DRAM type')
 df = merge(df, 'Release Price (USD)', 'Release price (USD) MSRP')
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
-df = df[~df['Chips'].str.contains(ur'^[2-9]\u00d7', re.UNICODE, na=False)]
-df = df[~df['Code name'].str.contains(ur'^[2-9]\u00d7', re.UNICODE, na=False)]
+df = df[~df['Chips'].str.contains(r'^[2-9]\u00d7', re.UNICODE, na=False)]
+df = df[~df['Code name'].str.contains(r'^[2-9]\u00d7', re.UNICODE, na=False)]
 df = df[~df['Core config'].str.contains(
-    ur'^[2-9]\u00d7', re.UNICODE, na=False)]
+    r'^[2-9]\u00d7', re.UNICODE, na=False)]
 # filter out if Model ends in [xX]2
 df = df[~df['Model'].str.contains('[xX]2$', na=False)]
 # filter out {transistors, die size} that end in x2
 df = df[~df['Transistors (million)'].str.contains(
-    ur'\u00d7[2-9]$', re.UNICODE, na=False)]
+    r'\u00d7[2-9]$', re.UNICODE, na=False)]
 df = df[~df['Die size (mm2)'].str.contains(
-    ur'\u00d7[2-9]$', re.UNICODE, na=False)]
+    r'\u00d7[2-9]$', re.UNICODE, na=False)]
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ['Double', 'Single', 'Half']:
@@ -147,22 +153,22 @@ for prec in ['Double', 'Single', 'Half']:
     df[col] = df[col].str.extract(r'^([\d\.]+)', expand=False)
 
     # convert TFLOPS to GFLOPS
-    tomerge = 'Processing power (TFLOPS) %s Prec.' % prec
-    df[col] = df[col].fillna(
-        pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
-    df.drop(tomerge, axis=1, inplace=True)
+    # tomerge = 'Processing power (TFLOPS) %s Prec.' % prec
+    # df[col] = df[col].fillna(
+    #     pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
+    # df.drop(tomerge, axis=1, inplace=True)
 
     df = df.rename(columns={col: '%s-precision GFLOPS' % prec})
 
 # split out 'transistors die size'
 # example: u'292\u00d7106 59 mm2'
-for exponent in [u'\u00d7106', u'\u00d7109', 'B']:
-    dftds = df['Transistors Die Size'].str.extract(u'^([\d\.]+)%s (\d+) mm2' % exponent,
+for exponent in ['\u00d7106', '\u00d7109', 'B']:
+    dftds = df['Transistors Die Size'].str.extract('^([\d\.]+)%s (\d+) mm2' % exponent,
                                                    expand=True)
-    if exponent == u'\u00d7106':
+    if exponent == '\u00d7106':
         df['Transistors (million)'] = df['Transistors (million)'].fillna(
             pd.to_numeric(dftds[0], errors='coerce'))
-    if exponent == u'\u00d7109' or exponent == 'B':
+    if exponent == '\u00d7109' or exponent == 'B':
         df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
             pd.to_numeric(dftds[0], errors='coerce'))
     df['Die size (mm2)'] = df['Die size (mm2)'].fillna(
