@@ -60,6 +60,10 @@ for vendor in ['NVIDIA', 'AMD']:
                       for col in df.columns.values]
         # Get rid of hyphenation in column names
         df.columns = [col.replace('- ', '') for col in df.columns.values]
+        # Get rid of space after slash in column names
+        df.columns = [col.replace('/ ', '/') for col in df.columns.values]
+        # Get rid of trailing space in column names
+        df.columns = df.columns.str.strip()
 
         df['Vendor'] = vendor
 
@@ -80,11 +84,12 @@ for vendor in ['NVIDIA', 'AMD']:
 df = pd.concat(data['NVIDIA']['dfs'] + data['AMD']['dfs'], ignore_index=True)
 
 
-def merge(df, dst, src, replaceNoWithNaN=False):
+def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
     if replaceNoWithNaN:
         df[src] = df[src].replace('No', np.nan)
     df[dst] = df[dst].fillna(df[src])
-    df.drop(src, axis=1, inplace=True)
+    if delete:
+        df.drop(src, axis=1, inplace=True)
     return df
 
 
@@ -192,18 +197,35 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
     pd.to_numeric(df['Transistors (million)'], errors='coerce') / 1000.0)
 
 # extract shader (processor) counts
+df = merge(df, 'Core config',
+           'Core config (SM/SMP/Streaming Multiprocessor)',
+           delete=False)
+df = merge(df, 'Core config',
+           'Core config CUDA cores (SM/SMP/Streaming Multiprocessor)',
+           delete=False)
+df = merge(df, 'Core config',
+           'Cuda cores Core config (SM/SMP/Streaming Multiprocessor)',
+           delete=False)
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
+# this converts core configs like "120(24x5)" to "120"
+df['Pixel/unified shader count'] = df['Pixel/unified shader count'].str.split(
+    '(').str[0]
+# now convert text to numbers
+df['Pixel/unified shader count'] = pd.to_numeric(
+    df['Pixel/unified shader count'], downcast='integer', errors='coerce')
 df = merge(df, 'Pixel/unified shader count', 'Stream processors')
 df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
+# note there might be zeroes
 
 df['SM count (extracted)'] = df['Core config'].str.extract(r'\((\d+ SM[MX])\)',
                                                            expand=False)
 df = merge(df, 'SM count', 'SM count (extracted)')
 for smcount in [
         # GF 10xx SM counts
-        'Core config (SM/SMP/ Streaming Multiprocessor)',
+        'Core config (SM/SMP/Streaming Multiprocessor)',
         # Volta series
-        'Core config CUDA cores (SM/SMP/Streaming Multiprocessor) ',
+        'Core config CUDA cores (SM/SMP/Streaming Multiprocessor)',
+        'Cuda cores Core config (SM/SMP/Streaming Multiprocessor)',
 ]:
     df['SM count (extracted)'] = df[smcount].str.extract(r'\((\d+)\)',
                                                          expand=False)
@@ -392,7 +414,8 @@ aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     color='Fab (nm):N',
 )
 
-sh = Chart(df).mark_point().encode(
+# need != 0 because we're taking a log
+sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
     x='Launch:T',
     y=Y('Pixel/unified shader count:Q',
         scale=Scale(type='log'),
@@ -403,14 +426,16 @@ sh = Chart(df).mark_point().encode(
                 ),
 )
 
-# df.to_csv("/tmp/gpu.csv", encoding="utf-8")
+df.to_csv("/tmp/gpu.csv", encoding="utf-8")
 
 template = """<!DOCTYPE html>
 <html>
 <head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega/3.0.2/vega.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-lite/2.0.0-rc2/vega-lite.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vega-embed/3.0.0-beta.20/vega-embed.js"></script>
+  <!-- Import Vega 3 & Vega-Lite 2 (does not have to be from CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/vega@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@2"></script>
+  <!-- Import vega-embed -->
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@3"></script>
   <title>{title}</title>
 
   <style media="screen">
@@ -433,7 +458,7 @@ template = """<!DOCTYPE html>
   var opt = {{
     "mode": "vega-lite",
   }};
-  vega.embed('#vis', {spec}, opt);
+  vegaEmbed('#vis', {spec}, opt).catch(console.warn);
 </script>
 </body>
 </html>"""
