@@ -112,6 +112,8 @@ df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
+# fix up watts?
+# df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
 df = merge(df, 'Model', 'Model (Codename)')
 # df = merge(df, 'Model', 'Chip (Device)')
 # replace when AMD page updated
@@ -128,6 +130,8 @@ df = merge(df, 'Core config', 'Core Config')
 df = merge(df, 'Memory Bus type', 'Memory RAM type')
 df = merge(df, 'Memory Bus type', 'Memory Type')
 df = merge(df, 'Memory Bus type', 'Memory configuration DRAM type')
+df = merge(df, 'Memory Bus width (bit)',
+           'Memory configuration Bus width (bit)')
 df = merge(df, 'Release Price (USD)', 'Release price (USD) MSRP')
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
@@ -183,14 +187,27 @@ for exponent in ['\u00d7106', '\u00d7109', 'B']:
 df['Core clock (MHz)'] = df['Core clock (MHz)'].astype(
     str).str.split(' ').str[0]
 
+df['Memory Bus width (bit)'] = df['Memory Bus width (bit)'].str.split(
+    ' ').str[0]
+df['Memory Bus width (bit)'] = df['Memory Bus width (bit)'].str.split(
+    '/').str[0]
+df['Memory Bus width (bit)'] = df['Memory Bus width (bit)'].str.split(
+    ',').str[0]
+# strip out bit width from combined column
+df['bus'] = df['Memory Bus type & width (bit)'].str.extract(
+    '(\d+)-bit', expand=False)
+df['bus'] = df['bus'].fillna(pd.to_numeric(df['bus'], errors='coerce'))
+df = merge(df, 'Memory Bus width (bit)', 'bus', delete=False)
 # collate memory bus type and take first word only, removing chud as
 # appropriate
-df = merge(df, 'Memory Bus type', 'Memory Bus type & width (bit)')
+df = merge(df, 'Memory Bus type',
+           'Memory Bus type & width (bit)', delete=False)
 df['Memory Bus type'] = df['Memory Bus type'].str.split(' ').str[0]
 df['Memory Bus type'] = df['Memory Bus type'].str.split(',').str[0]
 df['Memory Bus type'] = df['Memory Bus type'].str.split('/').str[0]
 df['Memory Bus type'] = df['Memory Bus type'].str.split('[').str[0]
 df.loc[df['Memory Bus type'] == 'EDO', 'Memory Bus type'] = 'EDO VRAM'
+
 
 # merge transistor counts
 df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
@@ -281,6 +298,19 @@ bw = Chart(df).mark_point().encode(
     color='Memory Bus type',
     shape='Vendor',
     tooltip=['Model', 'Memory Bandwidth (GB/s)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
+bus = Chart(df).mark_point().encode(
+    x='Launch:T',
+    y=Y('Memory Bus width (bit):Q',
+        scale=Scale(type='log'),
+        ),
+    color='Memory Bus type',
+    shape='Vendor',
+    tooltip=['Model', 'Memory Bus width (bit)'],
 ).properties(
     width=1213,
     height=750
@@ -547,6 +577,7 @@ readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](h
 
 outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
 for (chart, title) in [(bw, "Memory Bandwidth over Time"),
+                       (bus, "Memory Bus Width over Time"),
                        (pr, "Processing Power over Time"),
                        (sm, "SM count over Time"),
                        (sh, "Shader count over Time"),
