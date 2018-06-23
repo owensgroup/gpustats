@@ -280,7 +280,12 @@ bw = Chart(df).mark_point().encode(
         ),
     color='Memory Bus type',
     shape='Vendor',
-)
+    tooltip=['Model', 'Memory Bandwidth (GB/s)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 pr = Chart(pd.melt(df,
                    id_vars=['Launch', 'Model', 'GPU Type', 'Vendor'],
                    value_vars=['Single-precision GFLOPS',
@@ -294,7 +299,12 @@ pr = Chart(pd.melt(df,
         ),
     shape='Vendor',
     color='Datatype',
-)
+    tooltip=['Model', 'Processing power (GFLOPS)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 sm = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -302,7 +312,13 @@ sm = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
-)
+    tooltip=['Model', 'SM count'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
+
 die = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Die size (mm2):Q',
@@ -312,7 +328,13 @@ die = Chart(df).mark_point().encode(
                 scale=colormap,
                 ),
     shape='GPU Type',
-)
+    tooltip=['Model', 'Die size (mm2)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
+
 xt = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Transistors (billion):Q',
@@ -322,7 +344,13 @@ xt = Chart(df).mark_point().encode(
                 scale=colormap,
                 ),
     shape='GPU Type',
-)
+    tooltip=['Model', 'Transistors (billion)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
+
 fab = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Fab (nm):Q',
@@ -331,7 +359,13 @@ fab = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
-)
+    tooltip=['Model', 'Fab (nm)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
+
 ai = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Arithmetic intensity (FLOP/B):Q',
@@ -339,7 +373,12 @@ ai = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
-)
+    tooltip=['Model', 'Arithmetic intensity (FLOP/B)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -348,7 +387,12 @@ fpw = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
-)
+    tooltip=['Model', 'Single precision FLOPS/Watt'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 clk = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -357,7 +401,12 @@ clk = Chart(df).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
-)
+    tooltip=['Model', 'Core clock (MHz)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 cost = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -366,7 +415,12 @@ cost = Chart(df).mark_point().encode(
                 scale=colormap,
                 ),
     shape='GPU Type',
-)
+    tooltip=['Model', 'Release Price (USD)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 fperdollar = Chart(df).mark_point().encode(
     x='Launch:T',
@@ -375,7 +429,12 @@ fperdollar = Chart(df).mark_point().encode(
                 scale=colormap,
                 ),
     shape='GPU Type',
-)
+    tooltip=['Model', 'Single precision FLOPS/USD'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 # only plot chips with actual feature sizes
 fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
@@ -385,7 +444,12 @@ fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     y='Single precision FLOPS/Watt:Q',
     shape='Vendor',
     color='Fab (nm):N',
-)
+    tooltip=['Model', 'Fab (nm)', 'Single precision FLOPS/Watt'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 
 fpwbw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Memory Bandwidth (GB/s):Q',
@@ -394,7 +458,11 @@ fpwbw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     y='Single precision FLOPS/Watt:Q',
     shape='Vendor',
     color='Fab (nm):N',
-)
+    tooltip=['Model', 'Fab (nm)', 'Memory Bandwidth (GB/s)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
 
 aisp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
@@ -403,7 +471,11 @@ aisp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
     color='Fab (nm):N',
-)
+    tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
 
 aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Memory Bandwidth (GB/s):Q',
@@ -412,7 +484,11 @@ aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
     color='Fab (nm):N',
-)
+    tooltip=['Model', 'Fab (nm)', 'Memory Bandwidth (GB/s)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
 
 # need != 0 because we're taking a log
 sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
@@ -424,9 +500,13 @@ sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
     color=Color('Vendor',
                 scale=colormap,
                 ),
-)
+    tooltip=['Model', 'Pixel/unified shader count'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
 
-df.to_csv("/tmp/gpu.csv", encoding="utf-8")
+# df.to_csv("/tmp/gpu.csv", encoding="utf-8")
 
 template = """<!DOCTYPE html>
 <html>
@@ -487,9 +567,10 @@ for (chart, title) in [(bw, "Memory Bandwidth over Time"),
     # print chart.to_dict()
     with open(os.path.join(outputdir, title + '.html'), 'w') as f:
         spec = chart.to_dict()
-        spec['height'] = 750
-        spec['width'] = 1213
-        spec['encoding']['tooltip'] = {"field": "Model", "type": "nominal"}
+        # spec['height'] = 750
+        # spec['width'] = 1213
+        # spec['encoding']['tooltip'] = {"field": "Model", "type": "nominal"}
+        # this chart.to_dict -> json.dumps can probably be simplified
         f.write(template.format(spec=json.dumps(spec), title=title))
         # f.write(chart.from_json(spec_str).to_html(
         # title=title, template=template))
