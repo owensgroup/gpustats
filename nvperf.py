@@ -34,6 +34,7 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
     html = re.sub('\xa0', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
+    html = re.sub(r'<br />', ' ', html)  # breaking space -> ' '
     html = re.sub('\u2012', '-', html)  # figure dash -> '-'
     html = re.sub('\u2013', '-', html)  # en-dash -> '-'
     html = re.sub(r'mm<sup>2</sup>', 'mm2', html)  # mm^2 -> mm2
@@ -83,6 +84,9 @@ for vendor in ['NVIDIA', 'AMD']:
 
 df = pd.concat(data['NVIDIA']['dfs'] + data['AMD']['dfs'], ignore_index=True)
 
+# print all columns
+# print(list(df))
+
 
 def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
     if replaceNoWithNaN:
@@ -110,7 +114,6 @@ df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
-df = merge(df, 'TDP (Watts)', 'TDP (Watts) W')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
 # fix up watts?
 # df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
@@ -254,6 +257,13 @@ df = merge(df, 'SM count', 'SMX count')
 df['Architecture (Fab) (extracted)'] = df[
     'Architecture (Fab)'].str.extract(r'\((\d+) nm\)', expand=False)
 df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
+
+# NVIDIA has more complicated names of some newer fabs
+# TODO haven't figured this out yet
+# for fab in ['TSMC', 'Samsung']:
+#     df.loc[df['Fab (nm)'].str.match(
+#         '^' + fab), 'Fab (nm)'] = df['Fab (nm)'].str.extract('^' + fab + r'(\d+)', expand=False)
+
 
 # take first number from "release price" after deleting $ and ,
 df['Release Price (USD)'] = df['Release Price (USD)'].str.replace(
