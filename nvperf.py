@@ -45,7 +45,7 @@ for vendor in ['NVIDIA', 'AMD']:
     #     f.write(html.encode('utf8'))
 
     dfs = pd.read_html(html, match='Launch', parse_dates=True)
-    for df in dfs:
+    for idx, df in enumerate(dfs):
         # Multi-index to index
         df.columns = [' '.join(col).strip() for col in df.columns.values]
         # Get rid of 'Unnamed' column names
@@ -78,7 +78,12 @@ for vendor in ['NVIDIA', 'AMD']:
         # if we have duplicate column names, we will see them here
         # pd.concat will fail if so
         if ([c for c in Counter(df.columns).items() if c[1] > 1]):
-            print(df)
+            # so remove them
+            # https://stackoverflow.com/questions/14984119/python-pandas-remove-duplicate-columns
+            df = df.loc[:, ~df.columns.duplicated()]
+        # this assignment is because I don't have a way to do the above line
+        # in-place
+        dfs[idx] = df
 
     data[vendor]['dfs'] = dfs
 
@@ -112,7 +117,6 @@ df = merge(df, 'Processing power (GFLOPS) Double precision',
            replaceNoWithNaN=True)
 df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
-df = merge(df, 'TDP (Watts)', 'TDP (Watts) (GPU only)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
 # fix up watts?
@@ -123,6 +127,7 @@ df = merge(df, 'Model', 'Model (Codename)')
 df = merge(df, 'Model', 'Model: Mobility Radeon')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speeds Base core clock (MHz)')
+df = merge(df, 'Core clock (MHz)', 'Clock speeds R/F.E Base core clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Core (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speed Core (MHz)')
@@ -156,9 +161,11 @@ for prec in ['Double', 'Single', 'Half']:
     if prec != 'Half':
         df = merge(
             df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 2.0)' % prec)
-    df = merge(
-        df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)' % prec)
-    df = merge(df, col, 'Processing power (GFLOPS) %s' % prec)
+    for srccol in ['Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)',
+                   'Processing power (GFLOPS) %s precision R/F.E Base Core Reference (Base Boost) F.E. (Base Boost) R/F.E. (Max Boost 4.0)',
+                   'Processing power (GFLOPS) %s'
+                   ]:
+        df = merge(df, col, srccol % prec)
 
     # pick the first number we see as the actual number
     df[col] = df[col].astype(str)
@@ -223,9 +230,6 @@ df = merge(df, 'Core config',
 df = merge(df, 'Core config',
            'Core config CUDA cores (SM/SMP/Streaming Multiprocessor)',
            delete=False)
-df = merge(df, 'Core config',
-           'Cuda cores Core config (SM/SMP/Streaming Multiprocessor)',
-           delete=False)
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 # this converts core configs like "120(24x5)" to "120"
 df['Pixel/unified shader count'] = df['Pixel/unified shader count'].str.split(
@@ -245,7 +249,6 @@ for smcount in [
         'Core config (SM/SMP/Streaming Multiprocessor)',
         # Volta series
         'Core config CUDA cores (SM/SMP/Streaming Multiprocessor)',
-        'Cuda cores Core config (SM/SMP/Streaming Multiprocessor)',
 ]:
     df['SM count (extracted)'] = df[smcount].str.extract(r'\((\d+)\)',
                                                          expand=False)
