@@ -32,8 +32,11 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(
         r'<span [^>]*style="display:none[^>]*>([^<]+)</span>', '', html)
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
+    # someone writes "1234" as "1&nbsp;234", sigh
+    html = re.sub(r'(\d)&#160;(\d)', r'\1\2', html)
     html = re.sub('\xa0', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
+    html = re.sub(r'&nbsp;', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'<br />', ' ', html)  # breaking space -> ' '
     html = re.sub('\u2012', '-', html)  # figure dash -> '-'
     html = re.sub('\u2013', '-', html)  # en-dash -> '-'
@@ -127,7 +130,6 @@ df = merge(df, 'Model', 'Model (Codename)')
 df = merge(df, 'Model', 'Model: Mobility Radeon')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Base (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speeds Base core clock (MHz)')
-df = merge(df, 'Core clock (MHz)', 'Clock speeds R/F.E Base core clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock rate Core (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock speed Core (MHz)')
@@ -156,17 +158,22 @@ df = df[~df['Die size (mm2)'].str.contains(
     r'\u00d7[2-9]$', re.UNICODE, na=False)]
 
 # merge GFLOPS columns with "Boost" column headers and rename
-for prec in ['Double', 'Single', 'Half']:
+for prec in ['Single', 'Double', 'Half']:  # single before others for '1/16 SP'
     col = 'Processing power (GFLOPS) %s precision' % prec
+    spcol = '%s-precision GFLOPS' % 'Single'
     if prec != 'Half':
         df = merge(
             df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 2.0)' % prec)
-    for srccol in ['Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)',
-                   'Processing power (GFLOPS) %s precision R/F.E Base Core Reference (Base Boost) F.E. (Base Boost) R/F.E. (Max Boost 4.0)',
-                   'Processing power (GFLOPS) %s'
-                   ]:
+    for srccol in [  # 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)',
+        # 'Processing power (GFLOPS) %s precision R/F.E Base Core Reference (Base Boost) F.E. (Base Boost) R/F.E. (Max Boost 4.0)',
+        'Processing power (GFLOPS) %s'
+    ]:
         df = merge(df, col, srccol % prec)
 
+    # handle weird references to single-precision column
+    if prec != 'Single':
+        df.loc[df[col] == '1/16 SP', col] = pd.to_numeric(df[spcol]) / 16
+        df.loc[df[col] == '2x SP', col] = pd.to_numeric(df[spcol]) * 2
     # pick the first number we see as the actual number
     df[col] = df[col].astype(str)
     df[col] = df[col].str.extract(r'^([\d\.]+)', expand=False)
@@ -227,9 +234,6 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
 df = merge(df, 'Core config',
            'Core config (SM/SMP/Streaming Multiprocessor)',
            delete=False)
-df = merge(df, 'Core config',
-           'Core config CUDA cores (SM/SMP/Streaming Multiprocessor)',
-           delete=False)
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 # this converts core configs like "120(24x5)" to "120"
 df['Pixel/unified shader count'] = df['Pixel/unified shader count'].str.split(
@@ -244,15 +248,9 @@ df = merge(df, 'Pixel/unified shader count', 'Shaders Cuda cores (total)')
 df['SM count (extracted)'] = df['Core config'].str.extract(r'\((\d+ SM[MX])\)',
                                                            expand=False)
 df = merge(df, 'SM count', 'SM count (extracted)')
-for smcount in [
-        # GF 10xx SM counts
-        'Core config (SM/SMP/Streaming Multiprocessor)',
-        # Volta series
-        'Core config CUDA cores (SM/SMP/Streaming Multiprocessor)',
-]:
-    df['SM count (extracted)'] = df[smcount].str.extract(r'\((\d+)\)',
-                                                         expand=False)
-    df = merge(df, 'SM count', 'SM count (extracted)')
+df['SM count (extracted)'] = df['Core config'].str.extract(r'\((\d+)\)',
+                                                           expand=False)
+df = merge(df, 'SM count', 'SM count (extracted)')
 df = merge(df, 'SM count', 'SMX count')
 
 
@@ -262,6 +260,7 @@ df['Architecture (Fab) (extracted)'] = df[
 df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
 
 # NVIDIA has more complicated names of some newer fabs
+# "Process" is the new column name as well
 # TODO haven't figured this out yet
 # for fab in ['TSMC', 'Samsung']:
 #     df.loc[df['Fab (nm)'].str.match(
