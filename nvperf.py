@@ -237,6 +237,7 @@ df['Memory Bus width (bit)'] = df['Memory Bus width (bit)'].str.split(
 df['Memory Bus width (bit)'] = df['Memory Bus width (bit)'].str.split(
     ',').str[0]
 # strip out bit width from combined column
+df = merge(df, 'Memory Bus type & width (bit)', 'Memory Bus type & width')
 df['bus'] = df['Memory Bus type & width (bit)'].str.extract(
     '(\d+)-bit', expand=False)
 df['bus'] = df['bus'].fillna(pd.to_numeric(df['bus'], errors='coerce'))
