@@ -2,6 +2,7 @@
 
 import pandas as pd
 import numpy as np
+import itertools
 import requests
 import re
 import os
@@ -34,6 +35,8 @@ for vendor in ['NVIDIA', 'AMD']:
     html = re.sub(r'<span[^>]*>([^<]+)</span>', r'\1', html)
     # someone writes "1234" as "1&nbsp;234", sigh
     html = re.sub(r'(\d)&#160;(\d)', r'\1\2', html)
+    html = re.sub(r'&thinsp;', '', html)  # delete thin space (thousands sep)
+    html = re.sub(r'&#8201;', '', html)  # delete thin space (thousands sep)
     html = re.sub('\xa0', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&#160;', ' ', html)  # non-breaking space -> ' '
     html = re.sub(r'&nbsp;', ' ', html)  # non-breaking space -> ' '
@@ -47,13 +50,24 @@ for vendor in ['NVIDIA', 'AMD']:
     # with open('/tmp/%s.html' % vendor, 'wb') as f:
     #     f.write(html.encode('utf8'))
 
-    dfs = pd.read_html(html, match='Launch', parse_dates=True)
+    dfs = pd.read_html(html, match=re.compile(
+        'Launch|Release Date & Price'), parse_dates=True)
     for idx, df in enumerate(dfs):
         # Multi-index to index
-        df.columns = [' '.join(col).strip() for col in df.columns.values]
+
+        # column names that are duplicated should be unduplicated
+        # 'Launch Launch' -> 'Launch'
+        # TODO do this
+        # ' '.join(a for a, b in itertools.zip_longest(my_list, my_list[1:]) if a != b)`
+        # print(df.columns.values)
+        df.columns = [' '.join(a for a, b in itertools.zip_longest(
+            col, col[1:]) if (a != b and not a.startswith('Unnamed: '))).strip() for col in df.columns.values]
+        # df.columns = [' '.join(col).strip() for col in df.columns.values]
+
+        # TODO this next one disappears
         # Get rid of 'Unnamed' column names
-        df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
-                      for col in df.columns.values]
+        # df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
+        # for col in df.columns.values]
         # If a column-name word ends in a number or number,comma,number, delete
         # it
         df.columns = [' '.join([re.sub('[\d,]+$', '', word) for word in col.split()])
@@ -70,6 +84,13 @@ for vendor in ['NVIDIA', 'AMD']:
         df.columns = df.columns.str.strip()
 
         df['Vendor'] = vendor
+
+        if ('Launch' not in df.columns.values) and ('Release Date & Price' in df.columns.values):
+            # take everything up to ####
+            df['Launch'] = df['Release Date & Price'].str.extract(
+                r'^(.*\d\d\d\d)', expand=False)
+            df['Release Price (USD)'] = df['Release Date & Price'].str.extract(
+                r'\$([\d,]+)', expand=False)
 
         # make sure Launch is a string (dtype=object) before parsing it
         df['Launch'] = df['Launch'].apply(lambda x: str(x))
@@ -90,7 +111,8 @@ for vendor in ['NVIDIA', 'AMD']:
 
     data[vendor]['dfs'] = dfs
 
-df = pd.concat(data['NVIDIA']['dfs'] + data['AMD']['dfs'], ignore_index=True)
+df = pd.concat(data['NVIDIA']['dfs'] + data['AMD']
+               ['dfs'], sort=False, ignore_index=True)
 
 # print all columns
 # print(list(df))
@@ -122,9 +144,11 @@ df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
+df = merge(df, 'TDP (Watts)', 'TBP (Watts)')
 # fix up watts?
 # df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
 df = merge(df, 'Model', 'Model (Codename)')
+df = merge(df, 'Model', 'Model (codename)')
 # df = merge(df, 'Model', 'Chip (Device)')
 # replace when AMD page updated
 df = merge(df, 'Model', 'Model: Mobility Radeon')
@@ -137,6 +161,7 @@ df = merge(df, 'Core clock (MHz)', 'Clock speed Average (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Core Clock rate (MHz)')
 df = merge(df, 'Core clock (MHz)', 'Clock rate (MHz) Core (MHz)')
 df = merge(df, 'Core config', 'Core Config')
+df = merge(df, 'Transistors Die Size', 'Transistors & Die Size')
 df = merge(df, 'Memory Bus type', 'Memory RAM type')
 df = merge(df, 'Memory Bus type', 'Memory Type')
 df = merge(df, 'Memory Bus type', 'Memory configuration DRAM type')
@@ -161,9 +186,9 @@ df = df[~df['Die size (mm2)'].str.contains(
 for prec in ['Single', 'Double', 'Half']:  # single before others for '1/16 SP'
     col = 'Processing power (GFLOPS) %s precision' % prec
     spcol = '%s-precision GFLOPS' % 'Single'
-    if prec != 'Half':
-        df = merge(
-            df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 2.0)' % prec)
+    # if prec != 'Half':
+    #   df = merge(
+    #   df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 2.0)' % prec)
     for srccol in [  # 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)',
         # 'Processing power (GFLOPS) %s precision R/F.E Base Core Reference (Base Boost) F.E. (Base Boost) R/F.E. (Max Boost 4.0)',
         'Processing power (GFLOPS) %s'
@@ -176,6 +201,7 @@ for prec in ['Single', 'Double', 'Half']:  # single before others for '1/16 SP'
         df.loc[df[col] == '2x SP', col] = pd.to_numeric(df[spcol]) * 2
     # pick the first number we see as the actual number
     df[col] = df[col].astype(str)
+    df[col] = df[col].str.replace(',', '')  # get rid of commas
     df[col] = df[col].str.extract(r'^([\d\.]+)', expand=False)
 
     # convert TFLOPS to GFLOPS
@@ -231,9 +257,9 @@ df['Transistors (billion)'] = df['Transistors (billion)'].fillna(
     pd.to_numeric(df['Transistors (million)'], errors='coerce') / 1000.0)
 
 # extract shader (processor) counts
-df = merge(df, 'Core config',
-           'Core config (SM/SMP/Streaming Multiprocessor)',
-           delete=False)
+# df = merge(df, 'Core config',
+#            'Core config (SM/SMP/Streaming Multiprocessor)',
+#            delete=False)
 df['Pixel/unified shader count'] = df['Core config'].str.split(':').str[0]
 # this converts core configs like "120(24x5)" to "120"
 df['Pixel/unified shader count'] = df['Pixel/unified shader count'].str.split(
@@ -258,14 +284,20 @@ df = merge(df, 'SM count', 'SMX count')
 df['Architecture (Fab) (extracted)'] = df[
     'Architecture (Fab)'].str.extract(r'\((\d+) nm\)', expand=False)
 df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
+df['Architecture (Fab) (extracted)'] = df[
+    'Architecture & Fab'].str.extract(r'(\d+) nm', expand=False)
+df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
+df['Architecture (Fab) (extracted)'] = df[
+    'Architecture & Fab'].str.extract(r'TSMC|GloFo (\d+)', expand=False)
+df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
 
-# NVIDIA has more complicated names of some newer fabs
-# "Process" is the new column name as well
-# TODO haven't figured this out yet
+# NVIDIA: just grab number
 # for fab in ['TSMC', 'Samsung']:
 #     df.loc[df['Fab (nm)'].str.match(
 #         '^' + fab), 'Fab (nm)'] = df['Fab (nm)'].str.extract('^' + fab + r'(\d+)', expand=False)
-
+df['Architecture (Fab) (extracted)'] = df[
+    'Process'].str.extract(r'(\d+)', expand=False)
+df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
 
 # take first number from "release price" after deleting $ and ,
 df['Release Price (USD)'] = df['Release Price (USD)'].str.replace(
@@ -309,7 +341,7 @@ bw = Chart(df).mark_point().encode(
         ),
     color='Memory Bus type',
     shape='Vendor',
-    tooltip=['Model', 'Memory Bandwidth (GB/s)'],
+    tooltip=['Model', 'Memory Bus type', 'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
@@ -322,7 +354,7 @@ bus = Chart(df).mark_point().encode(
         ),
     color='Memory Bus type',
     shape='Vendor',
-    tooltip=['Model', 'Memory Bus width (bit)'],
+    tooltip=['Model', 'Memory Bus type', 'Memory Bus width (bit)'],
 ).properties(
     width=1213,
     height=750
@@ -341,7 +373,7 @@ pr = Chart(pd.melt(df,
         ),
     shape='Vendor',
     color='Datatype',
-    tooltip=['Model', 'Processing power (GFLOPS)'],
+    tooltip=['Model', 'Datatype', 'Processing power (GFLOPS)'],
 ).properties(
     width=1213,
     height=750
@@ -513,7 +545,8 @@ aisp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
     color='Fab (nm):N',
-    tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS'],
+    tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS',
+             'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
@@ -526,7 +559,8 @@ aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
     color='Fab (nm):N',
-    tooltip=['Model', 'Fab (nm)', 'Memory Bandwidth (GB/s)'],
+    tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS',
+             'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
@@ -553,11 +587,11 @@ sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
 template = """<!DOCTYPE html>
 <html>
 <head>
-  <!-- Import Vega 3 & Vega-Lite 2 (does not have to be from CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/vega@3"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega-lite@2"></script>
+  <!-- Import vega & vega-Lite (does not have to be from CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@3"></script>
   <!-- Import vega-embed -->
-  <script src="https://cdn.jsdelivr.net/npm/vega-embed@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@4"></script>
   <title>{title}</title>
 
   <style media="screen">
