@@ -144,6 +144,10 @@ df = merge(df, 'Memory Bandwidth (GB/s)',
            'Memory configuration Bandwidth (GB/s)')
 df = merge(df, 'TDP (Watts)', 'TDP (Watts) Max.')
 df = merge(df, 'TDP (Watts)', 'TBP (W)')
+# get only the number out of TBP
+# TODO this doesn't work - these numbers don't appear
+df['TBP'] = df['TBP'].str.extract(r'([\d]+)', expand=False)
+df = merge(df, 'TDP (Watts)', 'TBP')
 df = merge(df, 'TDP (Watts)', 'TBP (Watts)')
 # fix up watts?
 # df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
@@ -318,6 +322,8 @@ df['Single precision FLOPS/Watt'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (Watts)'], errors='coerce')
 df['Single precision FLOPS/USD'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / df['Release Price (USD)']
+df['Watts/mm2'] = pd.to_numeric(df['TDP (Watts)'], errors='coerce') / \
+    pd.to_numeric(df['Die size (mm2)'], errors='coerce')
 
 # remove references from end of model names
 df['Model'] = df['Model'].str.replace(referencesAtEnd, '')
@@ -583,6 +589,29 @@ sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
     height=750
 ).interactive()
 
+pwr = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
+    x='Launch:T',
+    y='TDP (Watts)',
+    shape='Vendor',
+    color='Fab (nm):N',
+    tooltip=['Model', 'Fab (nm)', 'TDP (Watts)'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
+pwrdens = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
+    x='Launch:T',
+    y='Watts/mm2',
+    shape='Vendor',
+    color='Fab (nm):N',
+    tooltip=['Model', 'Fab (nm)', 'TDP (Watts)',
+             'Die size (mm2)', 'Watts/mm2'],
+).properties(
+    width=1213,
+    height=750
+).interactive()
+
 # df.to_csv("/tmp/gpu.csv", encoding="utf-8")
 
 template = """<!DOCTYPE html>
@@ -640,6 +669,8 @@ for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (ai, "Arithmetic Intensity over Time"),
                        (aisp, "Arithmetic Intensity vs. Peak Processing Power"),
                        (aibw, "Arithmetic Intensity vs. Memory Bandwidth"),
+                       (pwr, "Power over Time"),
+                       (pwrdens, "Power density over Time"),
                        ]:
     # save html
     # print chart.to_dict()

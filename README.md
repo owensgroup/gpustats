@@ -19,3 +19,5 @@ Data sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/L
 - [Arithmetic Intensity over Time](plots/Arithmetic Intensity over Time.html)
 - [Arithmetic Intensity vs. Peak Processing Power](plots/Arithmetic Intensity vs. Peak Processing Power.html)
 - [Arithmetic Intensity vs. Memory Bandwidth](plots/Arithmetic Intensity vs. Memory Bandwidth.html)
+- [Power over Time](plots/Power over Time.html)
+- [Power density over Time](plots/Power density over Time.html)
