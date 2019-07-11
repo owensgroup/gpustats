@@ -341,32 +341,66 @@ df['GPU Type'] = np.where(
 colormap = Scale(domain=['AMD', 'NVIDIA'],
                  range=['#ff0000', '#76b900'])
 
+#### ahmed:
+bw_selection = selection_multi(fields=['Memory Bus type'])
+bw_color = condition(bw_selection,
+                     Color('Memory Bus type:N'),
+                     value('lightgray'))
+##
 bw = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
-    color='Memory Bus type',
+    #color='Memory Bus type',
+    color = bw_color,
     shape='Vendor',
     tooltip=['Model', 'Memory Bus type', 'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    bw_selection
+)
+#### ahmed:
+#Legend
+#bw |= Chart(df).mark_point().encode(
+#    y= Y('Memory Bus type:N', axis= Axis(orient='right')),
+#    color=bw_color
+#).add_selection(
+#    bw_selection
+#)
+##
 
+
+#### ahmed:
+bus_selection = selection_multi(fields=['Memory Bus type'])
+bus_color = condition(bus_selection,
+                     Color('Memory Bus type:N'),
+                     value('lightgray'))
+##
 bus = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Memory Bus width (bit):Q',
         scale=Scale(type='log'),
         ),
-    color='Memory Bus type',
+    #color='Memory Bus type',
+    color=bus_color,
     shape='Vendor',
     tooltip=['Model', 'Memory Bus type', 'Memory Bus width (bit)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    bus_selection
+)
 
+#### ahmed:
+pr_selection = selection_multi(fields=['Datatype'])
+pr_color = condition(pr_selection,
+                     Color('Datatype:N'),
+                     value('lightgray'))
+##
 pr = Chart(pd.melt(df,
                    id_vars=['Launch', 'Model', 'GPU Type', 'Vendor'],
                    value_vars=['Single-precision GFLOPS',
@@ -379,144 +413,216 @@ pr = Chart(pd.melt(df,
         scale=Scale(type='log'),
         ),
     shape='Vendor',
-    color='Datatype',
+    #color='Datatype',
+    color = pr_color,
     tooltip=['Model', 'Datatype', 'Processing power (GFLOPS)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    pr_selection
+)
 
 
+#### ahmed:
+sm_selection = selection_multi(fields=['Vendor'])
+sm_color = condition(sm_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 sm = Chart(df).mark_point().encode(
     x='Launch:T',
     y='SM count:Q',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor',scale=colormap,),
+    color = sm_color,
     tooltip=['Model', 'SM count'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    sm_selection
+)
 
 
+#### ahmed:
+die_selection = selection_multi(fields=['Vendor'])
+die_color = condition(die_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 die = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Die size (mm2):Q',
         scale=Scale(type='log'),
         ),
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor',scale=colormap,),
+    color=die_color,
     shape='GPU Type',
     tooltip=['Model', 'Die size (mm2)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    die_selection
+)
 
 
+#### ahmed:
+xt_selection = selection_multi(fields=['Vendor'])
+xt_color = condition(xt_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 xt = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Transistors (billion):Q',
         scale=Scale(type='log'),
         ),
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor',scale=colormap,),
+    color = xt_color,
     shape='GPU Type',
     tooltip=['Model', 'Transistors (billion)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    xt_selection
+)
 
 
+#### ahmed:
+fab_selection = selection_multi(fields=['Vendor'])
+fab_color = condition(fab_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 fab = Chart(df).mark_point().encode(
     x='Launch:T',
     y=Y('Fab (nm):Q',
         scale=Scale(type='log'),
         ),
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor',scale=colormap,),
+    color=fab_color,
     tooltip=['Model', 'Fab (nm)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    fab_selection
+)
 
 
+#### ahmed:
+ai_selection = selection_multi(fields=['Vendor'])
+ai_color = condition(ai_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 ai = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Arithmetic intensity (FLOP/B):Q',
     shape='GPU Type',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor',scale=colormap,),
+    color=ai_color,
     tooltip=['Model', 'Arithmetic intensity (FLOP/B)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    ai_selection
+)
 
 
+#### ahmed:
+fpw_selection = selection_multi(fields=['Vendor'])
+fpw_color = condition(fpw_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Single precision FLOPS/Watt:Q',
     shape='GPU Type',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor', scale=colormap,),
+    color = fpw_color,
     tooltip=['Model', 'Single precision FLOPS/Watt'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    fpw_selection
+)
 
 
+#### ahmed:
+clk_selection = selection_multi(fields=['Vendor'])
+clk_color = condition(clk_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 clk = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Core clock (MHz):Q',
     shape='GPU Type',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor', scale=colormap,),
+    color= clk_color,
     tooltip=['Model', 'Core clock (MHz)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    clk_selection
+)
 
 
+#### ahmed:
+cost_selection = selection_multi(fields=['Vendor'])
+cost_color = condition(cost_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 cost = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Release Price (USD):Q',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor', scale=colormap,),
+    color = cost_color,
     shape='GPU Type',
     tooltip=['Model', 'Release Price (USD)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    cost_selection
+)
 
 
+#### ahmed:
+fperdollar_selection = selection_multi(fields=['Vendor'])
+fperdollar_color = condition(fperdollar_selection,
+                     Color('Vendor:N',scale=colormap,),
+                     value('lightgray'))
+##
 fperdollar = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Single precision FLOPS/USD:Q',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor',scale=colormap,),
+    color=fperdollar_color,
     shape='GPU Type',
     tooltip=['Model', 'Single precision FLOPS/USD'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    fperdollar_selection
+)
 
 
+#### ahmed:
+fpwsp_selection = selection_multi(fields=['Fab (nm)'])
+fpwsp_color = condition(fpwsp_selection,
+                     Color('Fab (nm):N'),
+                     value('lightgray'))
+##
 # only plot chips with actual feature sizes
 fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
@@ -524,55 +630,94 @@ fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
         ),
     y='Single precision FLOPS/Watt:Q',
     shape='Vendor',
-    color='Fab (nm):N',
+    #color='Fab (nm):N',
+    color = fpwsp_color,
     tooltip=['Model', 'Fab (nm)', 'Single precision FLOPS/Watt'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    fpwsp_selection
+)
 
 
+#### ahmed:
+fpwbw_selection = selection_multi(fields=['Fab (nm)'])
+fpwbw_color = condition(fpwbw_selection,
+                     Color('Fab (nm):N'),
+                     value('lightgray'))
+##
 fpwbw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
     y='Single precision FLOPS/Watt:Q',
     shape='Vendor',
-    color='Fab (nm):N',
+    #color='Fab (nm):N',
+    color = fpwbw_color,
     tooltip=['Model', 'Fab (nm)', 'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    fpwbw_selection
+)
 
+
+#### ahmed:
+aisp_selection = selection_multi(fields=['Fab (nm)'])
+aisp_color = condition(aisp_selection,
+                     Color('Fab (nm):N'),
+                     value('lightgray'))
+##
 aisp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
         scale=Scale(type='log'),
         ),
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
-    color='Fab (nm):N',
+    #color='Fab (nm):N',
+    color = aisp_color,
     tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS',
              'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    aisp_selection
+)
 
+
+#### ahmed:
+aibw_selection = selection_multi(fields=['Fab (nm)'])
+aibw_color = condition(aibw_selection,
+                     Color('Fab (nm):N'),
+                     value('lightgray'))
+##
 aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
-    color='Fab (nm):N',
+    #color='Fab (nm):N',
+    color = aibw_color,
     tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS',
              'Memory Bandwidth (GB/s)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    aibw_selection
+)
 
+
+#### ahmed:
+sh_selection = selection_multi(fields=['Vendor'])
+sh_color = condition(sh_selection,
+                     Color('Vendor:N', scale=colormap,),
+                     value('lightgray'))
+##
 # need != 0 because we're taking a log
 sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
     x='Launch:T',
@@ -580,37 +725,58 @@ sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
         scale=Scale(type='log'),
         ),
     shape='GPU Type',
-    color=Color('Vendor',
-                scale=colormap,
-                ),
+    #color=Color('Vendor', scale=colormap,),
+    color = sh_color,
     tooltip=['Model', 'Pixel/unified shader count'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    sh_selection
+)
 
+
+#### ahmed:
+pwr_selection = selection_multi(fields=['Fab (nm)'])
+pwr_color = condition(pwr_selection,
+                     Color('Fab (nm):N'),
+                     value('lightgray'))
+##
 pwr = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x='Launch:T',
     y='TDP (Watts)',
     shape='Vendor',
-    color='Fab (nm):N',
+    #color='Fab (nm):N',
+    color = pwr_color,
     tooltip=['Model', 'Fab (nm)', 'TDP (Watts)'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    pwr_selection
+)
 
+
+#### ahmed:
+pwrdens_selection = selection_multi(fields=['Fab (nm)'])
+pwrdens_color = condition(pwrdens_selection,
+                     Color('Fab (nm):N'),
+                     value('lightgray'))
+##
 pwrdens = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x='Launch:T',
     y='Watts/mm2',
     shape='Vendor',
-    color='Fab (nm):N',
+    #color='Fab (nm):N',
+    color = pwrdens_color,
     tooltip=['Model', 'Fab (nm)', 'TDP (Watts)',
              'Die size (mm2)', 'Watts/mm2'],
 ).properties(
     width=1213,
     height=750
-).interactive()
+).interactive().add_selection(
+    pwrdens_selection
+)
 
 # df.to_csv("/tmp/gpu.csv", encoding="utf-8")
 
@@ -651,7 +817,12 @@ template = """<!DOCTYPE html>
 
 readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units) and [Wikipedia's AMD GPUs page](https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units).\n\n"
 
-outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
+#outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
+#ahmed: Get absoulte folder path https://stackoverflow.com/a/32973383
+script_dir = os.path.dirname(os.path.realpath('__file__'))
+rel_path = "plots"
+outputdir = os.path.join(script_dir, rel_path)
+
 for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (bus, "Memory Bus Width over Time"),
                        (pr, "Processing Power over Time"),
