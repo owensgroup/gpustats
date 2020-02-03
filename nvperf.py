@@ -73,8 +73,8 @@ for vendor in ['NVIDIA', 'AMD']:
         df.columns = [' '.join([re.sub('[\d,]+$', '', word) for word in col.split()])
                       for col in df.columns.values]
         # If a column-name word ends with one or more '[x]',
-        # where 'x' is a lower-case letter or number, delete it
-        df.columns = [' '.join([re.sub(r'(?:\[[a-z0-9]+\])+$', '', word) for word in col.split()])
+        # where 'x' is an upper- or lower-case letter or number, delete it
+        df.columns = [' '.join([re.sub(r'(?:\[[a-zA-Z0-9]+\])+$', '', word) for word in col.split()])
                       for col in df.columns.values]
         # Get rid of hyphenation in column names
         df.columns = [col.replace('- ', '') for col in df.columns.values]
@@ -297,10 +297,12 @@ df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
 df['Architecture (Fab) (extracted)'] = df[
     'Architecture & Fab'].str.extract(r'(\d+) nm', expand=False)
 df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
-for fab in ['TSMC', 'GloFo', 'Samsung/GloFo']:
+for fab in ['TSMC', 'GloFo', 'Samsung/GloFo', 'Samsung', 'SGS', 'SGS/TSMC', 'IBM', 'UMC', 'TSMC/UMC']:
     df['Architecture (Fab) (extracted)'] = df[
         'Architecture & Fab'].str.extract(r'%s (\d+)' % fab, expand=False)
     df = merge(df, 'Fab (nm)', 'Architecture (Fab) (extracted)')
+    df['Fab (nm)'] = df['Fab (nm)'].str.replace(fab, '')
+    df['Fab (nm)'] = df['Fab (nm)'].str.replace('nm$', '')
 
 # NVIDIA: just grab number
 # for fab in ['TSMC', 'Samsung']:
@@ -324,9 +326,9 @@ for col in ['Memory Bandwidth (GB/s)',
 # compute arithmetic intensity and FLOPS/Watt
 df['Arithmetic intensity (FLOP/B)'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['Memory Bandwidth (GB/s)'], errors='coerce')
-df['Single precision FLOPS/Watt'] = pd.to_numeric(df[
+df['Single precision GFLOPS/Watt'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / pd.to_numeric(df['TDP (Watts)'], errors='coerce')
-df['Single precision FLOPS/USD'] = pd.to_numeric(df[
+df['Single precision GFLOPS/USD'] = pd.to_numeric(df[
     'Single-precision GFLOPS'], errors='coerce') / df['Release Price (USD)']
 df['Watts/mm2'] = pd.to_numeric(df['TDP (Watts)'], errors='coerce') / \
     pd.to_numeric(df['Die size (mm2)'], errors='coerce')
@@ -358,7 +360,7 @@ bw = Chart(df).mark_point().encode(
     y=Y('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
-    #color='Memory Bus type',
+    # color='Memory Bus type',
     color=bw_color,
     shape='Vendor',
     tooltip=['Model', 'Memory Bus type', 'Memory Bandwidth (GB/s)'],
@@ -390,7 +392,7 @@ bus = Chart(df).mark_point().encode(
     y=Y('Memory Bus width (bit):Q',
         scale=Scale(type='log'),
         ),
-    #color='Memory Bus type',
+    # color='Memory Bus type',
     color=bus_color,
     shape='Vendor',
     tooltip=['Model', 'Memory Bus type', 'Memory Bus width (bit)'],
@@ -547,11 +549,11 @@ fpw_color = condition(fpw_selection,
 ##
 fpw = Chart(df).mark_point().encode(
     x='Launch:T',
-    y='Single precision FLOPS/Watt:Q',
+    y='Single precision GFLOPS/Watt:Q',
     shape='GPU Type',
-    #color=Color('Vendor', scale=colormap,),
+    # color=Color('Vendor', scale=colormap,),
     color=fpw_color,
-    tooltip=['Model', 'Single precision FLOPS/Watt'],
+    tooltip=['Model', 'Single precision GFLOPS/Watt'],
 ).properties(
     width=1213,
     height=750
@@ -570,7 +572,7 @@ clk = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Core clock (MHz):Q',
     shape='GPU Type',
-    #color=Color('Vendor', scale=colormap,),
+    # color=Color('Vendor', scale=colormap,),
     color=clk_color,
     tooltip=['Model', 'Core clock (MHz)'],
 ).properties(
@@ -590,7 +592,7 @@ cost_color = condition(cost_selection,
 cost = Chart(df).mark_point().encode(
     x='Launch:T',
     y='Release Price (USD):Q',
-    #color=Color('Vendor', scale=colormap,),
+    # color=Color('Vendor', scale=colormap,),
     color=cost_color,
     shape='GPU Type',
     tooltip=['Model', 'Release Price (USD)'],
@@ -610,11 +612,11 @@ fperdollar_color = condition(fperdollar_selection,
 ##
 fperdollar = Chart(df).mark_point().encode(
     x='Launch:T',
-    y='Single precision FLOPS/USD:Q',
+    y='Single precision GFLOPS/USD:Q',
     # color=Color('Vendor',scale=colormap,),
     color=fperdollar_color,
     shape='GPU Type',
-    tooltip=['Model', 'Single precision FLOPS/USD'],
+    tooltip=['Model', 'Single precision GFLOPS/USD'],
 ).properties(
     width=1213,
     height=750
@@ -634,11 +636,11 @@ fpwsp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Single-precision GFLOPS:Q',
         scale=Scale(type='log'),
         ),
-    y='Single precision FLOPS/Watt:Q',
+    y='Single precision GFLOPS/Watt:Q',
     shape='Vendor',
-    #color='Fab (nm):N',
+    # color='Fab (nm):N',
     color=fpwsp_color,
-    tooltip=['Model', 'Fab (nm)', 'Single precision FLOPS/Watt'],
+    tooltip=['Model', 'Fab (nm)', 'Single precision GFLOPS/Watt'],
 ).properties(
     width=1213,
     height=750
@@ -657,9 +659,9 @@ fpwbw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x=X('Memory Bandwidth (GB/s):Q',
         scale=Scale(type='log'),
         ),
-    y='Single precision FLOPS/Watt:Q',
+    y='Single precision GFLOPS/Watt:Q',
     shape='Vendor',
-    #color='Fab (nm):N',
+    # color='Fab (nm):N',
     color=fpwbw_color,
     tooltip=['Model', 'Fab (nm)', 'Memory Bandwidth (GB/s)'],
 ).properties(
@@ -682,7 +684,7 @@ aisp = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
         ),
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
-    #color='Fab (nm):N',
+    # color='Fab (nm):N',
     color=aisp_color,
     tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS',
              'Memory Bandwidth (GB/s)'],
@@ -706,7 +708,7 @@ aibw = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
         ),
     y='Arithmetic intensity (FLOP/B):Q',
     shape='Vendor',
-    #color='Fab (nm):N',
+    # color='Fab (nm):N',
     color=aibw_color,
     tooltip=['Model', 'Fab (nm)', 'Single-precision GFLOPS',
              'Memory Bandwidth (GB/s)'],
@@ -731,7 +733,7 @@ sh = Chart(df[df['Pixel/unified shader count'] != 0]).mark_point().encode(
         scale=Scale(type='log'),
         ),
     shape='GPU Type',
-    #color=Color('Vendor', scale=colormap,),
+    # color=Color('Vendor', scale=colormap,),
     color=sh_color,
     tooltip=['Model', 'Pixel/unified shader count'],
 ).properties(
@@ -752,7 +754,7 @@ pwr = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x='Launch:T',
     y='TDP (Watts)',
     shape='Vendor',
-    #color='Fab (nm):N',
+    # color='Fab (nm):N',
     color=pwr_color,
     tooltip=['Model', 'Fab (nm)', 'TDP (Watts)'],
 ).properties(
@@ -773,7 +775,7 @@ pwrdens = Chart(df[df['Fab (nm)'].notnull()]).mark_point().encode(
     x='Launch:T',
     y='Watts/mm2',
     shape='Vendor',
-    #color='Fab (nm):N',
+    # color='Fab (nm):N',
     color=pwrdens_color,
     tooltip=['Model', 'Fab (nm)', 'TDP (Watts)',
              'Die size (mm2)', 'Watts/mm2'],
@@ -791,9 +793,9 @@ template = """<!DOCTYPE html>
 <head>
   <!-- Import vega & vega-Lite (does not have to be from CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega-lite@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@4"></script>
   <!-- Import vega-embed -->
-  <script src="https://cdn.jsdelivr.net/npm/vega-embed@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
   <title>{title}</title>
 
   <style media="screen">
@@ -823,7 +825,7 @@ template = """<!DOCTYPE html>
 
 readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units) and [Wikipedia's AMD GPUs page](https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units).\n\n"
 
-#outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
+# outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
 # ahmed: Get absoulte folder path https://stackoverflow.com/a/32973383
 script_dir = os.path.dirname(os.path.realpath('__file__'))
 rel_path = "plots"
@@ -839,10 +841,10 @@ for (chart, title) in [(bw, "Memory Bandwidth over Time"),
                        (fab, "Feature size over Time"),
                        (clk, "Clock rate over Time"),
                        (cost, "Release price over Time"),
-                       (fperdollar, "FLOPS per Dollar over Time"),
-                       (fpw, "FLOPS per Watt over Time"),
-                       (fpwsp, "FLOPS per Watt vs. Peak Processing Power"),
-                       (fpwbw, "FLOPS per Watt vs. Memory Bandwidth"),
+                       (fperdollar, "GFLOPS per Dollar over Time"),
+                       (fpw, "GFLOPS per Watt over Time"),
+                       (fpwsp, "GFLOPS per Watt vs. Peak Processing Power"),
+                       (fpwbw, "GFLOPS per Watt vs. Memory Bandwidth"),
                        (ai, "Arithmetic Intensity over Time"),
                        (aisp, "Arithmetic Intensity vs. Peak Processing Power"),
                        (aibw, "Arithmetic Intensity vs. Memory Bandwidth"),
