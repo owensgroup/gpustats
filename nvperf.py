@@ -110,7 +110,7 @@ for vendor in ["NVIDIA", "AMD"]:
 
         # make sure Launch is a string (dtype=object) before parsing it
         df["Launch"] = df["Launch"].apply(lambda x: str(x))
-        df["Launch"] = df["Launch"].str.replace(referencesAtEnd, "")
+        df["Launch"] = df["Launch"].str.replace(referencesAtEnd, "", regex=True)
         df["Launch"] = df["Launch"].apply(
             lambda x: pd.to_datetime(x, infer_datetime_format=True, errors="coerce")
         )
@@ -173,7 +173,6 @@ df = merge(df, "TDP (Watts)", "TBP (W)")
 # TODO this doesn't work - these numbers don't appear
 df["TBP"] = df["TBP"].str.extract(r"([\d]+)", expand=False)
 df = merge(df, "TDP (Watts)", "TBP")
-df = merge(df, "TDP (Watts)", "TBP (Watts)")
 # fix up watts?
 # df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
 df = merge(df, "Model", "Model (Codename)")
@@ -356,7 +355,7 @@ for fab in [
     )
     df = merge(df, "Fab (nm)", "Architecture (Fab) (extracted)")
     df["Fab (nm)"] = df["Fab (nm)"].str.replace(fab, "")
-    df["Fab (nm)"] = df["Fab (nm)"].str.replace("nm$", "")
+    df["Fab (nm)"] = df["Fab (nm)"].str.replace("nm$", "", regex=True)
 
 # NVIDIA: just grab number
 # for fab in ['TSMC', 'Samsung']:
@@ -367,7 +366,7 @@ df = merge(df, "Fab (nm)", "Architecture (Fab) (extracted)")
 
 # take first number from "release price" after deleting $ and ,
 df["Release Price (USD)"] = (
-    df["Release Price (USD)"].str.replace(r"[,\$]", "").str.split(" ").str[0]
+    df["Release Price (USD)"].str.replace(r"[,\$]", "", regex=True).str.split(" ").str[0]
 )
 
 for col in [
@@ -394,9 +393,9 @@ df["Watts/mm2"] = pd.to_numeric(df["TDP (Watts)"], errors="coerce") / pd.to_nume
 )
 
 # remove references from end of model names
-df["Model"] = df["Model"].str.replace(referencesAtEnd, "")
+df["Model"] = df["Model"].str.replace(referencesAtEnd, "", regex=True)
 # then take 'em out of the middle too
-df["Model"] = df["Model"].str.replace(r"\[\d+\]", "")
+df["Model"] = df["Model"].str.replace(r"\[\d+\]", "", regex=True)
 
 # mark mobile processors
 df["GPU Type"] = np.where(
