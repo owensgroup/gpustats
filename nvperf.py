@@ -21,11 +21,14 @@ data = {
     "AMD": {
         "url": "https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units",
     },
+    "Intel": {
+        "url": "https://en.wikipedia.org/wiki/Intel_Xe",
+    },
 }
 
 referencesAtEnd = r"(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$"
 
-for vendor in ["NVIDIA", "AMD"]:
+for vendor in ["NVIDIA", "AMD", "Intel"]:
     # requests.get handles https
     html = requests.get(data[vendor]["url"]).text
     # oddly, some dates look like:
@@ -127,7 +130,7 @@ for vendor in ["NVIDIA", "AMD"]:
     data[vendor]["dfs"] = dfs
 
 df = pd.concat(
-    data["NVIDIA"]["dfs"] + data["AMD"]["dfs"], sort=False, ignore_index=True
+    data["NVIDIA"]["dfs"] + data["AMD"]["dfs"] + data["Intel"]["dfs"], sort=False, ignore_index=True
 )
 
 # print all columns
@@ -217,7 +220,6 @@ for prec in ["Single", "Double", "Half"]:
     df[col] = df[col].str.extract(r"^([\d\.]+)", expand=False)
     df[col] = pd.to_numeric(df[col]) * 1000.0  # change to GFLOPS
     df = merge(df, destcol, col)
-
 
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ["Single", "Double", "Half"]:  # single before others for '1/16 SP'
@@ -316,6 +318,7 @@ df["Pixel/unified shader count"] = pd.to_numeric(
 )
 df = merge(df, "Pixel/unified shader count", "Stream processors")
 df = merge(df, "Pixel/unified shader count", "Shaders Cuda cores (total)")
+df = merge(df, "Pixel/unified shader count", "Shading units") # Intel
 # note there might be zeroes
 
 df["SM count (extracted)"] = df["Core config"].str.extract(
@@ -328,6 +331,7 @@ df = merge(df, "SM count", "SM count (extracted)")
 df["SM count (extracted)"] = df["Core config"].str.extract(r"\((\d+)\)", expand=False)
 df = merge(df, "SM count", "SM count (extracted)")
 df = merge(df, "SM count", "SMX count")
+df = merge(df, "SM count", "Execution units") # Intel
 
 
 # merge in AMD fab stats
@@ -406,7 +410,7 @@ df["GPU Type"] = np.where(
 #   "nvidia"="#76b900",
 #   "intel"="#0860a8",
 
-colormap = Scale(domain=["AMD", "NVIDIA"], range=["#ff0000", "#76b900"])
+colormap = Scale(domain=["AMD", "NVIDIA", "Intel"], range=["#ff0000", "#76b900", "#0071c5"])
 
 # ahmed:
 bw_selection = selection_multi(fields=["Memory Bus type"])
@@ -893,7 +897,7 @@ template = """<!DOCTYPE html>
 </body>
 </html>"""
 
-readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units) and [Wikipedia's AMD GPUs page](https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units).\n\n"
+readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units), [Wikipedia's AMD GPUs page](https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units), and [Wikipedia's Intel Xe page](https://en.wikipedia.org/wiki/Intel_Xe).\n\n"
 
 # outputdir = "/Users/jowens/Documents/working/owensgroup/proj/gpustats/plots"
 # ahmed: Get absoulte folder path https://stackoverflow.com/a/32973383
