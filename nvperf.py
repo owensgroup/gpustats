@@ -112,7 +112,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
                 r"\$([\d,]+)", expand=False
             )
 
-        if ("Launch" not in df.columns.values):
+        if "Launch" not in df.columns.values:
             print("Launch not in following df:\n", df)
         # make sure Launch is a string (dtype=object) before parsing it
         df["Launch"] = df["Launch"].apply(lambda x: str(x))
@@ -218,9 +218,11 @@ df = df[
 df = df[~df["Die size (mm2)"].str.contains(r"\u00d7[2-9]$", re.UNICODE, na=False)]
 
 for prec in ["Single", "Double", "Half"]:
-    for col in [f"Processing power (TFLOPS) {prec} precision",
-                f"Processing power (TFLOPS) {prec} precision (base)",
-                f"Processing power (TFLOPS) {prec} precision (boost)"]:
+    for col in [
+        f"Processing power (TFLOPS) {prec} precision",
+        f"Processing power (TFLOPS) {prec} precision (base)",
+        f"Processing power (TFLOPS) {prec} precision (boost)",
+    ]:
         if col in df.columns.values:
             destcol = f"Processing power (GFLOPS) {prec} precision"
             df[col] = df[col].astype(str)
