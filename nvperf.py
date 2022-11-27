@@ -74,6 +74,9 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         ]
         # df.columns = [' '.join(col).strip() for col in df.columns.values]
 
+        # Intel Xe has "Arc X" rows that get translated into column names, delete
+        df.columns = [re.sub(" Arc [\w]*$", "", col) for col in df.columns.values]
+
         # TODO this next one disappears
         # Get rid of 'Unnamed' column names
         # df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
