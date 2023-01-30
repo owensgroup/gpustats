@@ -114,8 +114,9 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
             df["Launch"] = df["Release Date & Price"].str.extract(
                 r"^(.*\d\d\d\d)", expand=False
             )
+            # leaving this in as a string for now, will parse later
             df["Release Price (USD)"] = df["Release Date & Price"].str.extract(
-                r"\$([\d,]+)", expand=False
+                r"(\$[\d,]+)", expand=False
             )
 
         if "Launch" not in df.columns.values:
@@ -223,7 +224,9 @@ df = merge(df, "Memory Bus type", "Memory Type")
 df = merge(df, "Memory Bus type", "Memory configuration DRAM type")
 df = merge(df, "Memory Bus width (bit)", "Memory configuration Bus width (bit)")
 df = merge(df, "Release Price (USD)", "Release price (USD)")
+df = merge(df, "Release Price (USD)", "Price (USD)")
 df = merge(df, "Release Price (USD)", "Release price (USD) MSRP")
+df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(r"\$?([\d,]+)", expand=False)
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
 df = df[~df["Chips"].str.contains(r"^[2-9]\u00d7", re.UNICODE, na=False)]
