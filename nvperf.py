@@ -123,6 +123,8 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # make sure Launch is a string (dtype=object) before parsing it
         df["Launch"] = df["Launch"].apply(lambda x: str(x))
         df["Launch"] = df["Launch"].str.replace(referencesAtEnd, "", regex=True)
+        # kill everything beyond the year
+        df["Launch"] = df["Launch"].str.extract("^(.*?[\d]{4})", expand=False)
         df["Launch"] = df["Launch"].apply(
             lambda x: pd.to_datetime(x, infer_datetime_format=True, errors="coerce")
         )
