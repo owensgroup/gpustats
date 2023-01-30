@@ -36,6 +36,8 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
     # <td><span class="sortkey" style="display:none;speak:none">000000002010-02-25-0000</span><span style="white-space:nowrap">Feb 25, 2010</span></td>
     html = re.sub(r'<span [^>]*style="display:none[^>]*>([^<]+)</span>', "", html)
     html = re.sub(r"<span[^>]*>([^<]+)</span>", r"\1", html)
+    # pretty sure I don't need this next one (filter out <a href></a>)
+    # html = re.sub(r"<a href=[^>]*>([^<]+)</a>", r"\1", html)
     # someone writes "1234" as "1&nbsp;234", sigh
     html = re.sub(r"(\d)&#160;(\d)", r"\1\2", html)
     html = re.sub(r"&thinsp;", "", html)  # delete thin space (thousands sep)
@@ -46,6 +48,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
     html = re.sub(r"<br />", " ", html)  # breaking space -> ' '
     html = re.sub("\u2012", "-", html)  # figure dash -> '-'
     html = re.sub("\u2013", "-", html)  # en-dash -> '-'
+    html = re.sub("\u2014", "", html)  # delete em-dash (indicates empty cell)
     html = re.sub(r"mm<sup>2</sup>", "mm2", html)  # mm^2 -> mm2
     html = re.sub("\u00d710<sup>6</sup>", "\u00d7106", html)  # 10^6 -> 106
     html = re.sub("\u00d710<sup>9</sup>", "\u00d7109", html)  # 10^9 -> 109
@@ -144,8 +147,8 @@ df = pd.concat(
 # print all columns
 # print(list(df))
 
-
 def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
+    df[src] = df[src].replace("\u2014", np.nan) # em-dash
     if replaceNoWithNaN:
         df[src] = df[src].replace("No", np.nan)
     df[dst] = df[dst].fillna(df[src])
@@ -179,7 +182,11 @@ df = merge(
 )
 df = merge(df, "Memory Bandwidth (GB/s)", "Memory configuration Bandwidth (GB/s)")
 df = merge(df, "TDP (Watts)", "TDP (Watts) Max.")
+df = merge(df, "TDP (Watts)", "TDP (Watts) Max")
 df = merge(df, "TDP (Watts)", "TBP (W)")
+df = merge(df, "TDP (Watts)", "TDP (W)")
+df = merge(df, "TDP (Watts)", "Combined TDP Max. (W)")
+df = merge(df, "TDP (Watts)", "TDP /idle (Watts)")
 # get only the number out of TBP
 # TODO this doesn't work - these numbers don't appear
 df["TBP"] = df["TBP"].str.extract(r"([\d]+)", expand=False)
@@ -187,11 +194,16 @@ df = merge(df, "TDP (Watts)", "TBP")
 # fix up watts?
 # df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
 df = merge(df, "Model", "Model (Codename)")
+df = merge(df, "Model", "Model (Code name)")
 df = merge(df, "Model", "Model (codename)")
+df = merge(df, "Model", "Code name (console model)")
 # df = merge(df, 'Model', 'Chip (Device)')
 # replace when AMD page updated
 df = merge(df, "Model", "Model: Mobility Radeon")
+df = merge(df, "Core clock (MHz)", "Shaders Base clock (MHz) MHz")
+df = merge(df, "Core clock (MHz)", "Shader clock (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock rate Base (MHz)")
+df = merge(df, "Core clock (MHz)", "Clock rate (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock speeds Base core clock (MHz)")
 df = merge(df, "Core clock (MHz)", "Core Clock (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock rate Core (MHz)")
@@ -199,6 +211,9 @@ df = merge(df, "Core clock (MHz)", "Clock speed Core (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock speed Average (MHz)")
 df = merge(df, "Core clock (MHz)", "Core Clock rate (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock rate (MHz) Core (MHz)")
+df = merge(df, "Core clock (MHz)", "Clock speed Shader (MHz)")
+df = merge(df, "Core clock (MHz)", "Clock speeds  Base core (MHz)")
+df = merge(df, "Core clock (MHz)", "Core Clock (MHz) Base")
 df = merge(df, "Core config", "Core Config")
 df = merge(df, "Transistors Die Size", "Transistors & Die Size")
 df = merge(df, "Memory Bus type", "Memory RAM type")
@@ -418,15 +433,18 @@ df["Single-precision GFLOPS/mm2"] = pd.to_numeric(
     df["Single-precision GFLOPS"], errors="coerce"
 ) / pd.to_numeric(df["Die size (mm2)"], errors="coerce")
 
-# remove references from end of model names
-df["Model"] = df["Model"].str.replace(referencesAtEnd, "", regex=True)
-# then take 'em out of the middle too
-df["Model"] = df["Model"].str.replace(r"\[\d+\]", "", regex=True)
+# remove references from end of model/transistor names
+for col in ["Model", "Transistors (million)"]:
+    df[col] = df[col].str.replace(referencesAtEnd, "", regex=True)
+    # then take 'em out of the middle too
+    df[col] = df[col].str.replace(r"\[\d+\]", "", regex=True)
 
 # mark mobile processors
 df["GPU Type"] = np.where(
     df["Model"].str.contains(r" [\d]+M[X]?|\(Notebook\)"), "Mobile", "Desktop"
 )
+
+# print(df.columns.values)
 
 # values=c("amd"="#ff0000",
 #   "nvidia"="#76b900",
