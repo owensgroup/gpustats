@@ -150,8 +150,9 @@ df = pd.concat(
 # print all columns
 # print(list(df))
 
+
 def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
-    df[src] = df[src].replace("\u2014", np.nan) # em-dash
+    df[src] = df[src].replace("\u2014", np.nan)  # em-dash
     if replaceNoWithNaN:
         df[src] = df[src].replace("No", np.nan)
     df[dst] = df[dst].fillna(df[src])
@@ -226,7 +227,9 @@ df = merge(df, "Memory Bus type", "Memory configuration DRAM type")
 df = merge(df, "Memory Bus width (bit)", "Memory configuration Bus width (bit)")
 df = merge(df, "Release Price (USD)", "Release price (USD)")
 df = merge(df, "Release Price (USD)", "Release price (USD) MSRP")
-df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(r"\$?([\d,]+)", expand=False)
+df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(
+    r"\$?([\d,]+)", expand=False
+)
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
 df = df[~df["Chips"].str.contains(r"^[2-9]\u00d7", re.UNICODE, na=False)]
@@ -770,7 +773,7 @@ cost = (
     .mark_point()
     .encode(
         x="Launch:T",
-        y="Release Price (USD):Q",
+        y=Y("Release Price (USD):Q", scale=Scale(type="log")),
         # color=Color('Vendor', scale=colormap,),
         color=cost_color,
         shape="GPU Type",
