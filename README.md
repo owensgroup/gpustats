@@ -21,3 +21,5 @@ Data sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/L
 - [Arithmetic Intensity vs. Memory Bandwidth](plots/Arithmetic Intensity vs. Memory Bandwidth.html)
 - [Power over Time](plots/Power over Time.html)
 - [Power density over Time](plots/Power density over Time.html)
+- [Transistor density over Time](plots/Transistor density over Time.html)
+- [GFLOPS per Area vs. GFLOPS per Watt](plots/GFLOPS per Area vs. GFLOPS per Watt.html)
