@@ -225,7 +225,6 @@ df = merge(df, "Memory Bus type", "Memory Type")
 df = merge(df, "Memory Bus type", "Memory configuration DRAM type")
 df = merge(df, "Memory Bus width (bit)", "Memory configuration Bus width (bit)")
 df = merge(df, "Release Price (USD)", "Release price (USD)")
-df = merge(df, "Release Price (USD)", "Price (USD)")
 df = merge(df, "Release Price (USD)", "Release price (USD) MSRP")
 df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(r"\$?([\d,]+)", expand=False)
 
