@@ -1153,6 +1153,6 @@ def saveHTMLAndPDF(chart, title):
 Parallel(n_jobs=4)(delayed(saveHTMLAndPDF)(chart, title) for (chart, title) in plots)
 
 for (chart, title) in plots:
-    readme += f"- [{title}](plots/{title}.html) [[pdf]](plots/{title}.pdf)\n"
+    readme += f"{title} [[html](plots/{title}.html), [pdf](plots/{title}.pdf)]\n"
 with open(os.path.join(outputdir, "../README.md"), "w") as f:
     f.write(readme)
