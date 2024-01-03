@@ -169,12 +169,6 @@ df = merge(
 df = merge(
     df,
     "Processing power (GFLOPS) Single precision",
-    "Processing power (GFLOPS) Single precision (MAD+MUL)",
-    replaceNoWithNaN=True,
-)
-df = merge(
-    df,
-    "Processing power (GFLOPS) Single precision",
     "Processing power (GFLOPS) Single precision (MAD or FMA)",
     replaceNoWithNaN=True,
 )
@@ -463,7 +457,7 @@ colormap = Scale(
 )
 
 # ahmed:
-bw_selection = selection_multi(fields=["Memory Bus type"])
+bw_selection = selection_point(fields=["Memory Bus type"])
 bw_color = condition(bw_selection, Color("Memory Bus type:N"), value("lightgray"))
 ##
 bw = (
@@ -482,21 +476,21 @@ bw = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(bw_selection)
+    .add_params(bw_selection)
 )
 # ahmed:
 # Legend
 # bw |= Chart(df).mark_point().encode(
 #    y= Y('Memory Bus type:N', axis= Axis(orient='right')),
 #    color=bw_color
-# ).add_selection(
+# ).add_params(
 #    bw_selection
 # )
 ##
 
 
 # ahmed:
-bus_selection = selection_multi(fields=["Memory Bus type"])
+bus_selection = selection_point(fields=["Memory Bus type"])
 bus_color = condition(bus_selection, Color("Memory Bus type:N"), value("lightgray"))
 ##
 bus = (
@@ -515,11 +509,11 @@ bus = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(bus_selection)
+    .add_params(bus_selection)
 )
 
 # ahmed:
-pr_selection = selection_multi(fields=["Datatype"])
+pr_selection = selection_point(fields=["Datatype"])
 pr_color = condition(pr_selection, Color("Datatype:N"), value("lightgray"))
 ##
 pr = (
@@ -550,12 +544,12 @@ pr = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(pr_selection)
+    .add_params(pr_selection)
 )
 
 
 # ahmed:
-sm_selection = selection_multi(fields=["Vendor"])
+sm_selection = selection_point(fields=["Vendor"])
 sm_color = condition(
     sm_selection,
     Color(
@@ -577,12 +571,12 @@ sm = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(sm_selection)
+    .add_params(sm_selection)
 )
 
 
 # ahmed:
-die_selection = selection_multi(fields=["Vendor"])
+die_selection = selection_point(fields=["Vendor"])
 die_color = condition(
     die_selection,
     Color(
@@ -608,12 +602,12 @@ die = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(die_selection)
+    .add_params(die_selection)
 )
 
 
 # ahmed:
-xt_selection = selection_multi(fields=["Vendor"])
+xt_selection = selection_point(fields=["Vendor"])
 xt_color = condition(
     xt_selection,
     Color(
@@ -639,12 +633,12 @@ xt = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(xt_selection)
+    .add_params(xt_selection)
 )
 
 
 # ahmed:
-fab_selection = selection_multi(fields=["Vendor"])
+fab_selection = selection_point(fields=["Vendor"])
 fab_color = condition(
     fab_selection,
     Color(
@@ -669,12 +663,12 @@ fab = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(fab_selection)
+    .add_params(fab_selection)
 )
 
 
 # ahmed:
-ai_selection = selection_multi(fields=["Vendor"])
+ai_selection = selection_point(fields=["Vendor"])
 ai_color = condition(
     ai_selection,
     Color(
@@ -697,12 +691,12 @@ ai = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(ai_selection)
+    .add_params(ai_selection)
 )
 
 
 # ahmed:
-fpw_selection = selection_multi(fields=["Vendor"])
+fpw_selection = selection_point(fields=["Vendor"])
 fpw_color = condition(
     fpw_selection,
     Color(
@@ -725,12 +719,12 @@ fpw = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(fpw_selection)
+    .add_params(fpw_selection)
 )
 
 
 # ahmed:
-clk_selection = selection_multi(fields=["Vendor"])
+clk_selection = selection_point(fields=["Vendor"])
 clk_color = condition(
     clk_selection,
     Color(
@@ -753,12 +747,12 @@ clk = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(clk_selection)
+    .add_params(clk_selection)
 )
 
 
 # ahmed:
-cost_selection = selection_multi(fields=["Vendor"])
+cost_selection = selection_point(fields=["Vendor"])
 cost_color = condition(
     cost_selection,
     Color(
@@ -781,12 +775,12 @@ cost = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(cost_selection)
+    .add_params(cost_selection)
 )
 
 
 # ahmed:
-fperdollar_selection = selection_multi(fields=["Vendor"])
+fperdollar_selection = selection_point(fields=["Vendor"])
 fperdollar_color = condition(
     fperdollar_selection,
     Color(
@@ -809,12 +803,12 @@ fperdollar = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(fperdollar_selection)
+    .add_params(fperdollar_selection)
 )
 
 
 # ahmed:
-fpwsp_selection = selection_multi(fields=["Fab (nm)"])
+fpwsp_selection = selection_point(fields=["Fab (nm)"])
 fpwsp_color = condition(fpwsp_selection, Color("Fab (nm):N"), value("lightgray"))
 ##
 # only plot chips with actual feature sizes
@@ -834,12 +828,12 @@ fpwsp = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(fpwsp_selection)
+    .add_params(fpwsp_selection)
 )
 
 
 # ahmed:
-fpwbw_selection = selection_multi(fields=["Fab (nm)"])
+fpwbw_selection = selection_point(fields=["Fab (nm)"])
 fpwbw_color = condition(fpwbw_selection, Color("Fab (nm):N"), value("lightgray"))
 ##
 fpwbw = (
@@ -858,12 +852,12 @@ fpwbw = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(fpwbw_selection)
+    .add_params(fpwbw_selection)
 )
 
 
 # ahmed:
-aisp_selection = selection_multi(fields=["Fab (nm)"])
+aisp_selection = selection_point(fields=["Fab (nm)"])
 aisp_color = condition(aisp_selection, Color("Fab (nm):N"), value("lightgray"))
 ##
 aisp = (
@@ -887,12 +881,12 @@ aisp = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(aisp_selection)
+    .add_params(aisp_selection)
 )
 
 
 # ahmed:
-aibw_selection = selection_multi(fields=["Fab (nm)"])
+aibw_selection = selection_point(fields=["Fab (nm)"])
 aibw_color = condition(aibw_selection, Color("Fab (nm):N"), value("lightgray"))
 ##
 aibw = (
@@ -916,12 +910,12 @@ aibw = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(aibw_selection)
+    .add_params(aibw_selection)
 )
 
 
 # ahmed:
-sh_selection = selection_multi(fields=["Vendor"])
+sh_selection = selection_point(fields=["Vendor"])
 sh_color = condition(
     sh_selection,
     Color(
@@ -948,12 +942,12 @@ sh = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(sh_selection)
+    .add_params(sh_selection)
 )
 
 
 # ahmed:
-pwr_selection = selection_multi(fields=["Fab (nm)"])
+pwr_selection = selection_point(fields=["Fab (nm)"])
 pwr_color = condition(pwr_selection, Color("Fab (nm):N"), value("lightgray"))
 ##
 pwr = (
@@ -969,12 +963,12 @@ pwr = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(pwr_selection)
+    .add_params(pwr_selection)
 )
 
 
 # ahmed:
-pwrdens_selection = selection_multi(fields=["Fab (nm)"])
+pwrdens_selection = selection_point(fields=["Fab (nm)"])
 pwrdens_color = condition(pwrdens_selection, Color("Fab (nm):N"), value("lightgray"))
 ##
 pwrdens = (
@@ -990,11 +984,11 @@ pwrdens = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(pwrdens_selection)
+    .add_params(pwrdens_selection)
 )
 
 # ahmed:
-transdens_selection = selection_multi(fields=["Fab (nm)"])
+transdens_selection = selection_point(fields=["Fab (nm)"])
 transdens_color = condition(
     transdens_selection, Color("Fab (nm):N"), value("lightgray")
 )
@@ -1021,11 +1015,11 @@ transdens = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(transdens_selection)
+    .add_params(transdens_selection)
 )
 
 # ahmed:
-tdpvsdens_selection = selection_multi(fields=["Fab (nm)"])
+tdpvsdens_selection = selection_point(fields=["Fab (nm)"])
 tdpvsdens_color = condition(
     tdpvsdens_selection, Color("Fab (nm):N"), value("lightgray")
 )
@@ -1056,7 +1050,7 @@ tdpvsdens = (
     )
     .properties(width=1213, height=750)
     .interactive()
-    .add_selection(tdpvsdens_selection)
+    .add_params(tdpvsdens_selection)
 )
 
 # df.to_csv("/tmp/gpu.csv", encoding="utf-8")
