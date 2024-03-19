@@ -7,13 +7,13 @@ import requests
 import re
 import os
 import json
+from io import StringIO
 from joblib import Parallel, delayed
-
 from altair import *
-
-from fileops import save
-
 from collections import Counter
+
+# import vegafusion as vf
+# vf.enable()
 
 data = {
     "NVIDIA": {
@@ -57,7 +57,9 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
     #     f.write(html.encode('utf8'))
 
     dfs = pd.read_html(
-        html, match=re.compile("Launch|Release Date & Price"), parse_dates=True
+        StringIO(html),
+        match=re.compile("Launch|Release Date & Price"),
+        parse_dates=True,
     )
     for idx, df in enumerate(dfs):
         # Multi-index to index
@@ -78,7 +80,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # df.columns = [' '.join(col).strip() for col in df.columns.values]
 
         # Intel Xe has "Arc X" rows that get translated into column names, delete
-        df.columns = [re.sub(" Arc [\w]*$", "", col) for col in df.columns.values]
+        df.columns = [re.sub(r" Arc [\w]*$", "", col) for col in df.columns.values]
 
         # TODO this next one disappears
         # Get rid of 'Unnamed' column names
@@ -87,7 +89,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # If a column-name word ends in a number or number,comma,number, delete
         # it
         df.columns = [
-            " ".join([re.sub("[\d,]+$", "", word) for word in col.split()])
+            " ".join([re.sub(r"[\d,]+$", "", word) for word in col.split()])
             for col in df.columns.values
         ]
         # If a column-name word ends with one or more '[x]',
@@ -104,6 +106,19 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         df.columns = [col.replace("/ ", "/") for col in df.columns.values]
         # Get rid of trailing space in column names
         df.columns = df.columns.str.strip()
+
+        # These columns are causing JSON problems, just delete them rather than fix it
+        # undefined:17
+        # "API compliance (version) OpenCL": NaN,
+        #                                    ^
+        # SyntaxError: Unexpected token N in JSON at position 442
+        #   at JSON.parse (<anonymous>)
+        #   at /Users/jowens/Documents/working/vega-lite/bin/vl2vg:14:42
+
+        df = df.drop(
+            columns=[],
+            errors="ignore",
+        )
 
         df["Vendor"] = vendor
 
@@ -125,10 +140,8 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         df["Launch"] = df["Launch"].apply(lambda x: str(x))
         df["Launch"] = df["Launch"].str.replace(referencesAtEnd, "", regex=True)
         # kill everything beyond the year
-        df["Launch"] = df["Launch"].str.extract("^(.*?[\d]{4})", expand=False)
-        df["Launch"] = df["Launch"].apply(
-            lambda x: pd.to_datetime(x, infer_datetime_format=True, errors="coerce")
-        )
+        df["Launch"] = df["Launch"].str.extract(r"^(.*?[\d]{4})", expand=False)
+        df["Launch"] = df["Launch"].apply(lambda x: pd.to_datetime(x, errors="coerce"))
         # if we have duplicate column names, we will see them here
         # pd.concat will fail if so
         if [c for c in Counter(df.columns).items() if c[1] > 1]:
@@ -162,7 +175,6 @@ def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
 
 
 # merge related columns
-df = merge(df, "Model", "Model Units")
 df = merge(
     df, "Processing power (GFLOPS) Single precision", "Processing power (GFLOPS)"
 )
@@ -198,7 +210,7 @@ df = merge(df, "Model", "Code name (console model)")
 # df = merge(df, 'Model', 'Chip (Device)')
 # replace when AMD page updated
 df = merge(df, "Model", "Model: Mobility Radeon")
-df = merge(df, "Core clock (MHz)", "Shaders Base clock (MHz) MHz")
+df = merge(df, "Core clock (MHz)", "Shaders Base clock (MHz)")
 df = merge(df, "Core clock (MHz)", "Shader clock (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock rate Base (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock rate (MHz)")
@@ -287,7 +299,7 @@ for prec in ["Single", "Double", "Half"]:  # single before others for '1/16 SP'
 # example: u'292\u00d7106 59 mm2'
 for exponent in ["\u00d7106", "\u00d7109", "B"]:
     dftds = df["Transistors Die Size"].str.extract(
-        "^([\d\.]+)%s (\d+) mm2" % exponent, expand=True
+        r"^([\d\.]+)%s (\d+) mm2" % exponent, expand=True
     )
     if exponent == "\u00d7106":
         df["Transistors (million)"] = df["Transistors (million)"].fillna(
@@ -302,7 +314,8 @@ for exponent in ["\u00d7106", "\u00d7109", "B"]:
     )
 
 # some AMD chips have core/boost in same entry, take first number
-df["Core clock (MHz)"] = df["Core clock (MHz)"].astype(str).str.split(" ").str[0]
+# df["Core clock (MHz)"] = df["Core clock (MHz)"].astype(str).str.split(" ").str[0]
+df["Core clock (MHz)"] = df["Core clock (MHz)"].str.extract(r"(\d+)")
 
 df["Memory Bus width (bit)"] = (
     df["Memory Bus width (bit)"].astype(str).str.split(" ").str[0]
@@ -315,7 +328,7 @@ df["Memory Bus width (bit)"] = (
 )
 # strip out bit width from combined column
 df = merge(df, "Memory Bus type & width (bit)", "Memory Bus type & width")
-df["bus"] = df["Memory Bus type & width (bit)"].str.extract("(\d+)-bit", expand=False)
+df["bus"] = df["Memory Bus type & width (bit)"].str.extract(r"(\d+)-bit", expand=False)
 df["bus"] = df["bus"].fillna(pd.to_numeric(df["bus"], errors="coerce"))
 df = merge(df, "Memory Bus width (bit)", "bus", delete=False)
 # collate memory bus type and take first word only, removing chud as
@@ -347,7 +360,7 @@ df["Pixel/unified shader count"] = pd.to_numeric(
     df["Pixel/unified shader count"], downcast="integer", errors="coerce"
 )
 df = merge(df, "Pixel/unified shader count", "Stream processors")
-df = merge(df, "Pixel/unified shader count", "Shaders Cuda cores (total)")
+df = merge(df, "Pixel/unified shader count", "Shaders CUDA cores (total)")
 df = merge(df, "Pixel/unified shader count", "Shading units")  # Intel
 # note there might be zeroes
 
@@ -445,6 +458,10 @@ for col in ["Model", "Transistors (million)"]:
 df["GPU Type"] = np.where(
     df["Model"].str.contains(r" [\d]+M[X]?|\(Notebook\)"), "Mobile", "Desktop"
 )
+
+# we end up with a lot of "nan" that cause problems during JSON serialization
+# df = df.fillna(value="")
+# df = df.replace("nan", "")
 
 # print(df.columns.values)
 
@@ -1132,21 +1149,23 @@ def saveHTMLAndPDF(chart, title):
         # spec['width'] = 1213
         # spec['encoding']['tooltip'] = {"field": "Model", "type": "nominal"}
         # this chart.to_dict -> json.dumps can probably be simplified
+        # debug by spilling the json:
         f.write(template.format(spec=json.dumps(spec), title=title))
         # f.write(chart.from_json(spec_str).to_html(
         # title=title, template=template))
-        save(
-            chart,
-            df=pd.DataFrame(),
-            plotname=title,
-            outputdir=outputdir,
-            formats=["pdf"],
-        )
+    chart.save(os.path.join(outputdir, title + ".pdf"))
+    # save(
+    #     chart,
+    #     df=pd.DataFrame(),
+    #     plotname=title,
+    #     outputdir=outputdir,
+    #     formats=["pdf"],
+    # )
 
 
 Parallel(n_jobs=4)(delayed(saveHTMLAndPDF)(chart, title) for (chart, title) in plots)
 
-for (chart, title) in plots:
+for chart, title in plots:
     readme += f"- {title} [[html](plots/{title}.html), [pdf](plots/{title}.pdf)]\n"
 with open(os.path.join(outputdir, "../README.md"), "w") as f:
     f.write(readme)
