@@ -9,11 +9,10 @@ import os
 import json
 from io import StringIO
 from joblib import Parallel, delayed
-from altair import *
+import altair as alt
 from collections import Counter
-
-# import vegafusion as vf
-# vf.enable()
+import vl_convert as vlc
+import vegafusion as vf
 
 data = {
     "NVIDIA": {
@@ -28,6 +27,17 @@ data = {
 }
 
 referencesAtEnd = r"(?:\s*\[\d+\])+(?:\d+,)?(?:\d+)?$"
+
+
+def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
+    df[src] = df[src].replace("\u2014", np.nan)  # em-dash
+    if replaceNoWithNaN:
+        df[src] = df[src].replace("No", np.nan)
+    df[dst] = df[dst].fillna(df[src])
+    if delete:
+        df.drop(src, axis=1, inplace=True)
+    return df
+
 
 for vendor in ["NVIDIA", "AMD", "Intel"]:
     # requests.get handles https
@@ -81,6 +91,13 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
 
         # Intel Xe has "Arc X" rows that get translated into column names, delete
         df.columns = [re.sub(r" Arc [\w]*$", "", col) for col in df.columns.values]
+        # this is only to make sure the column names are not ending in #s
+        df = df.rename(
+            columns={
+                "GFLOPS FP32": "GFLOPS FP32_",
+                "MFLOPS FP32": "MFLOPS FP32_",
+            }
+        )
 
         # TODO this next one disappears
         # Get rid of 'Unnamed' column names
@@ -116,7 +133,13 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         #   at /Users/jowens/Documents/working/vega-lite/bin/vl2vg:14:42
 
         df = df.drop(
-            columns=[],
+            columns=[
+                "Supported API version OpenGL",
+                "Fillrate Pixel (GP/s)",
+                "Fillrate Texture (GT/s)",
+                "API support (version) OpenGL",
+                "API compliance (version) OpenGL",
+            ],
             errors="ignore",
         )
 
@@ -164,20 +187,11 @@ df = pd.concat(
 # print(list(df))
 
 
-def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
-    df[src] = df[src].replace("\u2014", np.nan)  # em-dash
-    if replaceNoWithNaN:
-        df[src] = df[src].replace("No", np.nan)
-    df[dst] = df[dst].fillna(df[src])
-    if delete:
-        df.drop(src, axis=1, inplace=True)
-    return df
-
-
 # merge related columns
 df = merge(
     df, "Processing power (GFLOPS) Single precision", "Processing power (GFLOPS)"
 )
+df = merge(df, "Processing power (GFLOPS) Single precision", "GFLOPS FP32_")
 df = merge(
     df,
     "Processing power (GFLOPS) Single precision",
@@ -263,6 +277,15 @@ for prec in ["Single", "Double", "Half"]:
             df[col] = pd.to_numeric(df[col]) * 1000.0  # change to GFLOPS
             df = merge(df, destcol, col)
 
+for col in ["MFLOPS FP32_"]:
+    if col in df.columns.values:
+        destcol = f"Processing power (GFLOPS) Single precision"
+        df[col] = df[col].astype(str)
+        df[col] = df[col].str.replace(",", "")  # get rid of commas
+        df[col] = df[col].str.extract(r"^([\d\.]+)", expand=False)
+        df[col] = pd.to_numeric(df[col]) / 1000.0  # change to GFLOPS
+        df = merge(df, destcol, col)
+
 # merge GFLOPS columns with "Boost" column headers and rename
 for prec in ["Single", "Double", "Half"]:  # single before others for '1/16 SP'
     col = "Processing power (GFLOPS) %s precision" % prec
@@ -341,9 +364,12 @@ df["Memory Bus type"] = df["Memory Bus type"].str.split("[").str[0]
 df.loc[df["Memory Bus type"] == "EDO", "Memory Bus type"] = "EDO VRAM"
 
 
-# merge transistor counts
+# merge and numerify transistor counts
 df["Transistors (billion)"] = df["Transistors (billion)"].fillna(
     pd.to_numeric(df["Transistors (million)"], errors="coerce") / 1000.0
+)
+df["Transistors (billion)"] = pd.to_numeric(
+    df["Transistors (billion)"], errors="coerce"
 )
 
 # extract shader (processor) counts
@@ -419,13 +445,18 @@ df["Release Price (USD)"] = (
     .str[0]
 )
 
+# this cleans up columns to make sure they're not mixed float/text
+# also was useful to make sure columns can be converted to Arrow without errors
 for col in [
     "Memory Bandwidth (GB/s)",
     "TDP (Watts)",
     "Fab (nm)",
     "Release Price (USD)",
+    "Core clock (MHz)",
 ]:
     df[col] = pd.to_numeric(df[col], errors="coerce")
+    df[col] = df[col].astype(float)
+
 
 # compute new columns
 df["Arithmetic intensity (FLOP/B)"] = pd.to_numeric(
@@ -465,26 +496,28 @@ df["GPU Type"] = np.where(
 
 # print(df.columns.values)
 
-# values=c("amd"="#ff0000",
+# alt.values=c("amd"="#ff0000",
 #   "nvidia"="#76b900",
 #   "intel"="#0860a8",
 
-colormap = Scale(
+colormap = alt.Scale(
     domain=["AMD", "NVIDIA", "Intel"], range=["#ff0000", "#76b900", "#0071c5"]
 )
 
 # ahmed:
-bw_selection = selection_point(fields=["Memory Bus type"])
-bw_color = condition(bw_selection, Color("Memory Bus type:N"), value("lightgray"))
+bw_selection = alt.selection_point(fields=["Memory Bus type"])
+bw_color = alt.condition(
+    bw_selection, alt.Color("Memory Bus type:N"), alt.value("lightgray")
+)
 ##
 bw = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Memory Bandwidth (GB/s):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         # color='Memory Bus type',
         color=bw_color,
@@ -507,17 +540,19 @@ bw = (
 
 
 # ahmed:
-bus_selection = selection_point(fields=["Memory Bus type"])
-bus_color = condition(bus_selection, Color("Memory Bus type:N"), value("lightgray"))
+bus_selection = alt.selection_point(fields=["Memory Bus type"])
+bus_color = alt.condition(
+    bus_selection, alt.Color("Memory Bus type:N"), alt.value("lightgray")
+)
 ##
 bus = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Memory Bus width (bit):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         # color='Memory Bus type',
         color=bus_color,
@@ -530,11 +565,11 @@ bus = (
 )
 
 # ahmed:
-pr_selection = selection_point(fields=["Datatype"])
-pr_color = condition(pr_selection, Color("Datatype:N"), value("lightgray"))
+pr_selection = alt.selection_point(fields=["Datatype"])
+pr_color = alt.condition(pr_selection, alt.Color("Datatype:N"), alt.value("lightgray"))
 ##
 pr = (
-    Chart(
+    alt.Chart(
         pd.melt(
             df,
             id_vars=["Launch", "Model", "GPU Type", "Vendor"],
@@ -550,9 +585,9 @@ pr = (
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Processing power (GFLOPS):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         shape="Vendor",
         # color='Datatype',
@@ -566,23 +601,23 @@ pr = (
 
 
 # ahmed:
-sm_selection = selection_point(fields=["Vendor"])
-sm_color = condition(
+sm_selection = alt.selection_point(fields=["Vendor"])
+sm_color = alt.condition(
     sm_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 sm = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
         y="SM count:Q",
-        # color=Color('Vendor',scale=colormap,),
+        # color=alt.Color('Vendor',scale=colormap,),
         color=sm_color,
         tooltip=["Model", "SM count"],
     )
@@ -593,26 +628,26 @@ sm = (
 
 
 # ahmed:
-die_selection = selection_point(fields=["Vendor"])
-die_color = condition(
+die_selection = alt.selection_point(fields=["Vendor"])
+die_color = alt.condition(
     die_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 die = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Die size (mm2):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
-        # color=Color('Vendor',scale=colormap,),
+        # color=alt.Color('Vendor',scale=colormap,),
         color=die_color,
         shape="GPU Type",
         tooltip=["Model", "Die size (mm2)"],
@@ -624,26 +659,26 @@ die = (
 
 
 # ahmed:
-xt_selection = selection_point(fields=["Vendor"])
-xt_color = condition(
+xt_selection = alt.selection_point(fields=["Vendor"])
+xt_color = alt.condition(
     xt_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 xt = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Transistors (billion):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
-        # color=Color('Vendor',scale=colormap,),
+        # color=alt.Color('Vendor',scale=colormap,),
         color=xt_color,
         shape="GPU Type",
         tooltip=["Model", "Transistors (billion)"],
@@ -655,26 +690,26 @@ xt = (
 
 
 # ahmed:
-fab_selection = selection_point(fields=["Vendor"])
-fab_color = condition(
+fab_selection = alt.selection_point(fields=["Vendor"])
+fab_color = alt.condition(
     fab_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 fab = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Fab (nm):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
-        # color=Color('Vendor',scale=colormap,),
+        # color=alt.Color('Vendor',scale=colormap,),
         color=fab_color,
         tooltip=["Model", "Fab (nm)"],
     )
@@ -685,24 +720,24 @@ fab = (
 
 
 # ahmed:
-ai_selection = selection_point(fields=["Vendor"])
-ai_color = condition(
+ai_selection = alt.selection_point(fields=["Vendor"])
+ai_color = alt.condition(
     ai_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 ai = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
         y="Arithmetic intensity (FLOP/B):Q",
         shape="GPU Type",
-        # color=Color('Vendor',scale=colormap,),
+        # color=alt.Color('Vendor',scale=colormap,),
         color=ai_color,
         tooltip=["Model", "Arithmetic intensity (FLOP/B)"],
     )
@@ -713,24 +748,24 @@ ai = (
 
 
 # ahmed:
-fpw_selection = selection_point(fields=["Vendor"])
-fpw_color = condition(
+fpw_selection = alt.selection_point(fields=["Vendor"])
+fpw_color = alt.condition(
     fpw_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 fpw = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
         y="Single precision GFLOPS/Watt:Q",
         shape="GPU Type",
-        # color=Color('Vendor', scale=colormap,),
+        # color=alt.Color('Vendor', scale=colormap,),
         color=fpw_color,
         tooltip=["Model", "Single precision GFLOPS/Watt"],
     )
@@ -741,24 +776,24 @@ fpw = (
 
 
 # ahmed:
-clk_selection = selection_point(fields=["Vendor"])
-clk_color = condition(
+clk_selection = alt.selection_point(fields=["Vendor"])
+clk_color = alt.condition(
     clk_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 clk = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
         y="Core clock (MHz):Q",
         shape="GPU Type",
-        # color=Color('Vendor', scale=colormap,),
+        # color=alt.Color('Vendor', scale=colormap,),
         color=clk_color,
         tooltip=["Model", "Core clock (MHz)"],
     )
@@ -769,23 +804,23 @@ clk = (
 
 
 # ahmed:
-cost_selection = selection_point(fields=["Vendor"])
-cost_color = condition(
+cost_selection = alt.selection_point(fields=["Vendor"])
+cost_color = alt.condition(
     cost_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 cost = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y("Release Price (USD):Q", scale=Scale(type="log")),
-        # color=Color('Vendor', scale=colormap,),
+        y=alt.Y("Release Price (USD):Q", scale=alt.Scale(type="log")),
+        # color=alt.Color('Vendor', scale=colormap,),
         color=cost_color,
         shape="GPU Type",
         tooltip=["Model", "Release Price (USD)"],
@@ -797,23 +832,23 @@ cost = (
 
 
 # ahmed:
-fperdollar_selection = selection_point(fields=["Vendor"])
-fperdollar_color = condition(
+fperdollar_selection = alt.selection_point(fields=["Vendor"])
+fperdollar_color = alt.condition(
     fperdollar_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 fperdollar = (
-    Chart(df)
+    alt.Chart(df)
     .mark_point()
     .encode(
         x="Launch:T",
         y="Single precision GFLOPS/USD:Q",
-        # color=Color('Vendor',scale=colormap,),
+        # color=alt.Color('Vendor',scale=colormap,),
         color=fperdollar_color,
         shape="GPU Type",
         tooltip=["Model", "Single precision GFLOPS/USD"],
@@ -825,17 +860,19 @@ fperdollar = (
 
 
 # ahmed:
-fpwsp_selection = selection_point(fields=["Fab (nm)"])
-fpwsp_color = condition(fpwsp_selection, Color("Fab (nm):N"), value("lightgray"))
+fpwsp_selection = alt.selection_point(fields=["Fab (nm)"])
+fpwsp_color = alt.condition(
+    fpwsp_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
+)
 ##
 # only plot chips with actual feature sizes
 fpwsp = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
-        x=X(
+        x=alt.X(
             "Single-precision GFLOPS:Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         y="Single precision GFLOPS/Watt:Q",
         shape="Vendor",
@@ -850,16 +887,18 @@ fpwsp = (
 
 
 # ahmed:
-fpwbw_selection = selection_point(fields=["Fab (nm)"])
-fpwbw_color = condition(fpwbw_selection, Color("Fab (nm):N"), value("lightgray"))
+fpwbw_selection = alt.selection_point(fields=["Fab (nm)"])
+fpwbw_color = alt.condition(
+    fpwbw_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
+)
 ##
 fpwbw = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
-        x=X(
+        x=alt.X(
             "Memory Bandwidth (GB/s):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         y="Single precision GFLOPS/Watt:Q",
         shape="Vendor",
@@ -874,16 +913,18 @@ fpwbw = (
 
 
 # ahmed:
-aisp_selection = selection_point(fields=["Fab (nm)"])
-aisp_color = condition(aisp_selection, Color("Fab (nm):N"), value("lightgray"))
+aisp_selection = alt.selection_point(fields=["Fab (nm)"])
+aisp_color = alt.condition(
+    aisp_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
+)
 ##
 aisp = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
-        x=X(
+        x=alt.X(
             "Single-precision GFLOPS:Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         y="Arithmetic intensity (FLOP/B):Q",
         shape="Vendor",
@@ -903,16 +944,18 @@ aisp = (
 
 
 # ahmed:
-aibw_selection = selection_point(fields=["Fab (nm)"])
-aibw_color = condition(aibw_selection, Color("Fab (nm):N"), value("lightgray"))
+aibw_selection = alt.selection_point(fields=["Fab (nm)"])
+aibw_color = alt.condition(
+    aibw_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
+)
 ##
 aibw = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
-        x=X(
+        x=alt.X(
             "Memory Bandwidth (GB/s):Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         y="Arithmetic intensity (FLOP/B):Q",
         shape="Vendor",
@@ -932,28 +975,28 @@ aibw = (
 
 
 # ahmed:
-sh_selection = selection_point(fields=["Vendor"])
-sh_color = condition(
+sh_selection = alt.selection_point(fields=["Vendor"])
+sh_color = alt.condition(
     sh_selection,
-    Color(
+    alt.Color(
         "Vendor:N",
         scale=colormap,
     ),
-    value("lightgray"),
+    alt.value("lightgray"),
 )
 ##
 # need != 0 because we're taking a log
 sh = (
-    Chart(df[df["Pixel/unified shader count"] != 0])
+    alt.Chart(df[df["Pixel/unified shader count"] != 0])
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Pixel/unified shader count:Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         shape="GPU Type",
-        # color=Color('Vendor', scale=colormap,),
+        # color=alt.Color('Vendor', scale=colormap,),
         color=sh_color,
         tooltip=["Model", "Pixel/unified shader count"],
     )
@@ -964,11 +1007,13 @@ sh = (
 
 
 # ahmed:
-pwr_selection = selection_point(fields=["Fab (nm)"])
-pwr_color = condition(pwr_selection, Color("Fab (nm):N"), value("lightgray"))
+pwr_selection = alt.selection_point(fields=["Fab (nm)"])
+pwr_color = alt.condition(
+    pwr_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
+)
 ##
 pwr = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
         x="Launch:T",
@@ -985,11 +1030,13 @@ pwr = (
 
 
 # ahmed:
-pwrdens_selection = selection_point(fields=["Fab (nm)"])
-pwrdens_color = condition(pwrdens_selection, Color("Fab (nm):N"), value("lightgray"))
+pwrdens_selection = alt.selection_point(fields=["Fab (nm)"])
+pwrdens_color = alt.condition(
+    pwrdens_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
+)
 ##
 pwrdens = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
         x="Launch:T",
@@ -1005,19 +1052,19 @@ pwrdens = (
 )
 
 # ahmed:
-transdens_selection = selection_point(fields=["Fab (nm)"])
-transdens_color = condition(
-    transdens_selection, Color("Fab (nm):N"), value("lightgray")
+transdens_selection = alt.selection_point(fields=["Fab (nm)"])
+transdens_color = alt.condition(
+    transdens_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
 )
 ##
 transdens = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
         x="Launch:T",
-        y=Y(
+        y=alt.Y(
             "Transistor Density (B/mm2)",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         shape="Vendor",
         # color='Fab (nm):N',
@@ -1036,22 +1083,22 @@ transdens = (
 )
 
 # ahmed:
-tdpvsdens_selection = selection_point(fields=["Fab (nm)"])
-tdpvsdens_color = condition(
-    tdpvsdens_selection, Color("Fab (nm):N"), value("lightgray")
+tdpvsdens_selection = alt.selection_point(fields=["Fab (nm)"])
+tdpvsdens_color = alt.condition(
+    tdpvsdens_selection, alt.Color("Fab (nm):N"), alt.value("lightgray")
 )
 ##
 tdpvsdens = (
-    Chart(df[df["Fab (nm)"].notnull()])
+    alt.Chart(df[df["Fab (nm)"].notnull()])
     .mark_point()
     .encode(
-        x=X(
+        x=alt.X(
             "Single precision GFLOPS/Watt:Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
-        y=Y(
+        y=alt.Y(
             "Single-precision GFLOPS/mm2:Q",
-            scale=Scale(type="log"),
+            scale=alt.Scale(type="log"),
         ),
         shape="Vendor",
         # color='Fab (nm):N',
@@ -1141,31 +1188,24 @@ plots = [
 
 
 def saveHTMLAndPDF(chart, title):
-    # save html
-    # print chart.to_dict()
-    with open(os.path.join(outputdir, title + ".html"), "w") as f:
-        spec = chart.to_dict()
-        # spec['height'] = 750
-        # spec['width'] = 1213
-        # spec['encoding']['tooltip'] = {"field": "Model", "type": "nominal"}
-        # this chart.to_dict -> json.dumps can probably be simplified
-        # debug by spilling the json:
-        f.write(template.format(spec=json.dumps(spec), title=title))
-        # f.write(chart.from_json(spec_str).to_html(
-        # title=title, template=template))
-    chart.save(os.path.join(outputdir, title + ".pdf"))
-    # save(
-    #     chart,
-    #     df=pd.DataFrame(),
-    #     plotname=title,
-    #     outputdir=outputdir,
-    #     formats=["pdf"],
-    # )
+    chart.save(os.path.join(outputdir, title + ".pdf"), engine="vl-convert")
+    vf.save_html(chart, os.path.join(outputdir, title + ".html"))
 
 
-Parallel(n_jobs=4)(delayed(saveHTMLAndPDF)(chart, title) for (chart, title) in plots)
+# Parallel(n_jobs=4)(delayed(saveHTMLAndPDF)(chart, title) for (chart, title) in plots)
+
+# if we're looking for a particular value, here's how we find it:
+# search_val = "1066"
+# for col in df.columns:
+#     try:
+#         if df[col].dtype.kind == "O":
+#             idx = df[col].tolist().index(search_val)
+#             print(f"val: {search_val}, col: {col}, index: {idx}")
+#     except valueError:
+#         pass
 
 for chart, title in plots:
+    saveHTMLAndPDF(chart, title)
     readme += f"- {title} [[html](plots/{title}.html), [pdf](plots/{title}.pdf)]\n"
 with open(os.path.join(outputdir, "../README.md"), "w") as f:
     f.write(readme)
