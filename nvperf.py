@@ -376,15 +376,9 @@ for exponent in ["\u00d7106", "\u00d7109", "B"]:
 # df["Core clock (MHz)"] = df["Core clock (MHz)"].astype(str).str.split(" ").str[0]
 df["Core clock (MHz)"] = df["Core clock (MHz)"].str.extract(r"(\d+)")
 
-df["Memory Bus width (bit)"] = (
-    df["Memory Bus width (bit)"].astype(str).str.split(" ").str[0]
-)
-df["Memory Bus width (bit)"] = (
-    df["Memory Bus width (bit)"].astype(str).str.split("/").str[0]
-)
-df["Memory Bus width (bit)"] = (
-    df["Memory Bus width (bit)"].astype(str).str.split(",").str[0]
-)
+# Simple treatment of bus width: just grab the first number
+df["Memory Bus width (bit)"] = df["Memory Bus width (bit)"].apply(lambda x: str(x))
+df["Memory Bus width (bit)"] = df["Memory Bus width (bit)"].str.extract(r"(\d+)")
 # strip out bit width from combined column
 df = merge(df, "Memory Bus type & width (bit)", "Memory Bus type & width")
 df["bus"] = df["Memory Bus type & width (bit)"].str.extract(r"(\d+)-bit", expand=False)
@@ -492,6 +486,9 @@ df["Transistor Density (B/mm2)"] = pd.to_numeric(
 df["Single-precision GFLOPS/mm2"] = pd.to_numeric(
     df["Single-precision GFLOPS"], errors="coerce"
 ) / pd.to_numeric(df["Die size (mm2)"], errors="coerce")
+df["Memory Bandwidth per Pin (GB/s)"] = pd.to_numeric(
+    df["Memory Bandwidth (GB/s)"], errors="coerce"
+) / pd.to_numeric(df["Memory Bus width (bit)"], errors="coerce")
 
 # remove references from end of model/transistor names
 for col in ["Model", "Transistors (million)"]:
@@ -515,31 +512,6 @@ df["GPU Type"] = np.where(
 
 colormap = alt.Scale(
     domain=["AMD", "NVIDIA", "Intel"], range=["#ff0000", "#76b900", "#0071c5"]
-)
-
-# ahmed:
-bw_selection = alt.selection_point(fields=["Memory Bus type"])
-bw_color = alt.condition(
-    bw_selection, alt.Color("Memory Bus type:N"), alt.value("lightgray")
-)
-##
-bwx = (
-    alt.Chart(df)
-    .mark_point()
-    .encode(
-        x="Launch:T",
-        y=alt.Y(
-            "Memory Bandwidth (GB/s):Q",
-            scale=alt.Scale(type="log"),
-        ),
-        # color='Memory Bus type',
-        color=bw_color,
-        shape="Vendor",
-        tooltip=["Model", "Memory Bus type", "Memory Bandwidth (GB/s)"],
-    )
-    .properties(width=1213, height=750)
-    .interactive()
-    .add_params(bw_selection)
 )
 
 config_default = {
@@ -571,6 +543,7 @@ config = {
         "tooltip": [
             "Memory Bus type",
             "Memory Bandwidth (GB/s)",
+            "Memory Bus width (bit)",
         ],
     },
     "bus": {
@@ -578,6 +551,16 @@ config = {
         "y": "Memory Bus width (bit):Q",
         "color": "Memory Bus type:N",
         "tooltip": ["Memory Bus type", "Memory Bus width (bit)"],
+    },
+    "bwpin": {
+        "title": "Memory Bandwidth per Pin over Time",
+        "y": "Memory Bandwidth per Pin (GB/s):Q",
+        "color": "Memory Bus type:N",
+        "tooltip": [
+            "Memory Bus type",
+            "Memory Bandwidth (GB/s)",
+            "Memory Bus width (bit)",
+        ],
     },
     "pr": {
         "title": "Processing Power over Time",
