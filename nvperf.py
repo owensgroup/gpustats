@@ -28,7 +28,10 @@ data = {
     },
 }
 
+# this matches a number at the end
 referencesAtEnd = r"(?:\s*\[[a-z\d]+\])+(?:\d+,)?(?:\d+)?$"
+# this does not
+referencesOnlyAtEnd = r"(?:\s*\[[a-z\d]+\])+$"
 
 
 def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
@@ -249,6 +252,7 @@ df["TBP"] = pd.to_numeric(df["TBP"].str.extract(r"(\d+)", expand=False))
 df = merge(df, "TDP (Watts)", "TBP", delete=False)
 # fix up watts?
 # df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
+df = merge(df, "Model", "Model (Architecture)")  # could separate out uarch
 df = merge(df, "Model", "Model (Codename)")
 df = merge(df, "Model", "Model (Code name)")
 df = merge(df, "Model", "Model (codename)")
@@ -408,7 +412,8 @@ df["Transistors (billion)"] = pd.to_numeric(
 # df = merge(df, 'Core config',
 #            'Core config (SM/SMP/Streaming Multiprocessor)',
 #            delete=False)
-# Intel-specific: get rid of "N Xe cores"
+# Intel-specific: extract then get rid of "N Xe cores"
+df["Xe cores"] = df["Core config"].str.extract(r"^(\d)+ Xe cores", expand=False)
 df["Core config"] = df["Core config"].str.replace(r"^\d+ Xe cores ", "", regex=True)
 df["Pixel/unified shader count"] = df["Core config"].str.split(":").str[0]
 # this converts core configs like "120(24x5)" to "120"
@@ -424,6 +429,7 @@ df = merge(df, "Pixel/unified shader count", "Shaders CUDA cores (total)")
 df = merge(df, "Pixel/unified shader count", "Shading units")  # Intel
 # note there might be zeroes
 
+df = merge(df, "SM count", "Xe cores")
 df["SM count (extracted)"] = df["Core config"].str.extract(
     r"\((\d+ SM[MX])\)", expand=False
 )
@@ -438,10 +444,11 @@ df = merge(df, "SM count", "Execution units")  # Intel
 
 # Simple treatment of fab: just grab the first number
 df = merge(df, "Fab (nm)", "Process")
-df["Fab (nm)"] = df["Fab (nm)"].str.replace(referencesAtEnd, "", regex=True)
+df["Fab (nm)"] = df["Fab (nm)"].apply(lambda x: str(x))
+df["Fab (nm)"] = df["Fab (nm)"].str.replace(referencesOnlyAtEnd, "", regex=True)
 df["Fab (nm)"] = df["Fab (nm)"].str.extract(r"(\d+)")
 # merge in AMD fab stats
-for pat in [r"(\d+) nm", r"TSMC N(\d+)"]:
+for pat in [r"(\d+) nm", r"(?:TSMC N|GloFo |GF |TSMC CLN|Samsung )(\d+)"]:
     df["Fab (extracted)"] = df["Architecture & Fab"].str.extract(pat, expand=False)
     df = merge(df, "Fab (nm)", "Fab (extracted)")
 
@@ -550,6 +557,9 @@ vendor_colormap = alt.Color(
     "Vendor:N",
     scale=colormap,
 )
+
+# if we need to knock out a set of null rows:
+# "df": df[df["Fab (nm)"].notnull()],
 
 config = {
     "bw": {
@@ -664,7 +674,6 @@ config = {
     },
     "fpwsp": {
         "title": "GFLOPS per Watt vs. Peak Processing Power",
-        "df": df[df["Fab (nm)"].notnull()],
         "color": "Fab (nm):N",
         "x": "Single-precision GFLOPS:Q",
         "xscale": "log",
@@ -679,7 +688,6 @@ config = {
     },
     "fpwbw": {
         "title": "GFLOPS per Watt vs. Memory Bandwidth",
-        "df": df[df["Fab (nm)"].notnull()],
         "color": "Fab (nm):N",
         "x": "Memory Bandwidth (GB/s):Q",
         "xscale": "log",
@@ -696,7 +704,6 @@ config = {
     },
     "aisp": {
         "title": "Arithmetic Intensity vs. Peak Processing Power",
-        "df": df[df["Fab (nm)"].notnull()],
         "color": "Fab (nm):N",
         "x": "Single-precision GFLOPS:Q",
         "xscale": "log",
@@ -710,7 +717,6 @@ config = {
     },
     "aibw": {
         "title": "Arithmetic Intensity vs. Memory Bandwidth",
-        "df": df[df["Fab (nm)"].notnull()],
         "color": "Fab (nm):N",
         "x": "Memory Bandwidth (GB/s):Q",
         "xscale": "log",
@@ -724,7 +730,6 @@ config = {
     },
     "pwr": {
         "title": "Power over Time",
-        "df": df[df["Fab (nm)"].notnull()],
         "y": "TDP (Watts)",
         "shape": "Vendor:N",
         "color": "Fab (nm):N",
@@ -732,7 +737,6 @@ config = {
     },
     "pwrdens": {
         "title": "Power density over Time",
-        "df": df[df["Fab (nm)"].notnull()],
         "y": "Watts/mm2",
         "yscale": "linear",
         "shape": "Vendor:N",
