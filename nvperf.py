@@ -246,12 +246,13 @@ df = merge(df, "TDP (Watts)", "TBP (W)")
 df = merge(df, "TDP (Watts)", "TDP (W)")
 df = merge(df, "TDP (Watts)", "Combined TDP Max. (W)")
 df = merge(df, "TDP (Watts)", "TDP /idle (Watts)")
-# get only the number out of TBP
-# TODO this doesn't work - these numbers don't appear
-df["TBP"] = pd.to_numeric(df["TBP"].str.extract(r"(\d+)", expand=False))
-df = merge(df, "TDP (Watts)", "TBP", delete=False)
-# fix up watts?
-# df['TDP (Watts)'] = df['TDP (Watts)'].str.extract(r'<([\d\.]+)', expand=False)
+# get only the number out of {TBP,TDP}
+for col in ["TBP", "TDP"]:
+    df[f"{col} (extracted)"] = pd.to_numeric(
+        df[col].str.extract(r"(\d+)", expand=False)
+    )
+    df = merge(df, "TDP (Watts)", f"{col} (extracted)", delete=False)
+
 df = merge(df, "Model", "Model (Architecture)")  # could separate out uarch
 df = merge(df, "Model", "Model (Codename)")
 df = merge(df, "Model", "Model (Code name)")
@@ -805,6 +806,15 @@ script_dir = os.path.dirname(os.path.realpath("__file__"))
 rel_path = "plots"
 outputdir = os.path.join(script_dir, rel_path)
 
+
+def stripShorthand(str):
+    if str[-2] == ":" and str[-1].isupper():
+        str = str[:-2]
+    if str[0] == "[" and str[-1] == "]":
+        str = str[1:-1]
+    return str
+
+
 for key in config:
     color_selection = alt.selection_point(encodings=["color"], bind="legend")
     shape_selection = alt.selection_point(encodings=["shape"], bind="legend")
@@ -842,6 +852,22 @@ for key in config:
         )
         .properties(width=1213, height=750, title=title)
         .interactive()
+        .add_params(color_selection)  # remove if saving lchart
+        .add_params(shape_selection)
+    )
+
+    lchart = (
+        (
+            alt.layer(
+                chart,
+                chart.transform_regression(
+                    on=stripShorthand(c["x"]),
+                    regression=stripShorthand(c["y"]),
+                    # groupby=[stripShorthand(c["color"])],
+                    method=c["yscale"],
+                ).mark_line(),
+            )
+        )
         .add_params(color_selection)
         .add_params(shape_selection)
     )
