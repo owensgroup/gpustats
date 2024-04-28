@@ -246,12 +246,13 @@ df = merge(df, "TDP (Watts)", "TBP (W)")
 df = merge(df, "TDP (Watts)", "TDP (W)")
 df = merge(df, "TDP (Watts)", "Combined TDP Max. (W)")
 df = merge(df, "TDP (Watts)", "TDP /idle (Watts)")
+df = df.copy()  # this unfragments the df, better performance
 # get only the number out of {TBP,TDP}
 for col in ["TBP", "TDP"]:
     df[f"{col} (extracted)"] = pd.to_numeric(
         df[col].str.extract(r"(\d+)", expand=False)
     )
-    df = merge(df, "TDP (Watts)", f"{col} (extracted)", delete=False)
+    df = merge(df, "TDP (Watts)", f"{col} (extracted)")
 
 df = merge(df, "Model", "Model (Architecture)")  # could separate out uarch
 df = merge(df, "Model", "Model (Codename)")
@@ -373,13 +374,11 @@ for exponent in ["\u00d7106", "\u00d7109", "B"]:
         pd.to_numeric(dftds[1], errors="coerce")
     )
 
-# some AMD chips have core/boost in same entry, take first number
-# df["Core clock (MHz)"] = df["Core clock (MHz)"].astype(str).str.split(" ").str[0]
-df["Core clock (MHz)"] = df["Core clock (MHz)"].str.extract(r"(\d+)")
+# Simple treatment of Core clock and bus width: just grab the first number
+for col in ["Core clock (MHz)", "Memory Bus width (bit)"]:
+    df[col] = df[col].apply(lambda x: str(x))
+    df[col] = df[col].str.extract(r"(\d+)")
 
-# Simple treatment of bus width: just grab the first number
-df["Memory Bus width (bit)"] = df["Memory Bus width (bit)"].apply(lambda x: str(x))
-df["Memory Bus width (bit)"] = df["Memory Bus width (bit)"].str.extract(r"(\d+)")
 # strip out bit width from combined column
 df = merge(df, "Memory Bus type & width (bit)", "Memory Bus type & width")
 df["bus"] = df["Memory Bus type & width (bit)"].str.extract(r"(\d+)-bit", expand=False)
@@ -856,6 +855,8 @@ for key in config:
         .add_params(shape_selection)
     )
 
+    regression_method = {"linear": "linear", "log": "exp"}
+
     lchart = (
         (
             alt.layer(
@@ -864,7 +865,7 @@ for key in config:
                     on=stripShorthand(c["x"]),
                     regression=stripShorthand(c["y"]),
                     # groupby=[stripShorthand(c["color"])],
-                    method=c["yscale"],
+                    method=regression_method[c["yscale"]],
                 ).mark_line(),
             )
         )
