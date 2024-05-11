@@ -374,6 +374,12 @@ for exponent in ["\u00d7106", "\u00d7109", "B"]:
         pd.to_numeric(dftds[1], errors="coerce")
     )
 
+# remove references from end of model/transistor names
+for col in ["Model", "Transistors (million)"]:
+    df[col] = df[col].str.replace(referencesAtEnd, "", regex=True)
+    # then take 'em out of the middle too
+    df[col] = df[col].str.replace(r"\[\d+\]", "", regex=True)
+
 # Simple treatment of Core clock and bus width: just grab the first number
 for col in ["Core clock (MHz)", "Memory Bus width (bit)"]:
     df[col] = df[col].apply(lambda x: str(x))
@@ -454,6 +460,11 @@ df["Release Price (USD)"] = (
     .str[0]
 )
 
+# patch up weird Radeon Pro V series data
+# works around Pandas bug https://github.com/pandas-dev/pandas/issues/58461
+df.loc[df["Model"] == "Radeon Pro V520 (Navi 12)", "TDP (Watts)"] = 225
+df.loc[df["Model"] == "Radeon Pro V620 (Navi 21)", "TDP (Watts)"] = 300
+
 # this cleans up columns to make sure they're not mixed float/text
 # also was useful to make sure columns can be converted to Arrow without errors
 for col in [
@@ -489,12 +500,6 @@ df["Single-precision GFLOPS/mm2"] = pd.to_numeric(
 df["Memory Bandwidth per Pin (GB/s)"] = pd.to_numeric(
     df["Memory Bandwidth (GB/s)"], errors="coerce"
 ) / pd.to_numeric(df["Memory Bus width (bit)"], errors="coerce")
-
-# remove references from end of model/transistor names
-for col in ["Model", "Transistors (million)"]:
-    df[col] = df[col].str.replace(referencesAtEnd, "", regex=True)
-    # then take 'em out of the middle too
-    df[col] = df[col].str.replace(r"\[\d+\]", "", regex=True)
 
 # mark mobile processors
 df["GPU Type"] = np.where(
