@@ -583,7 +583,7 @@ config = {
         "tooltip": ["L2 Cache (MB)"],
     },
     "l2dram": {
-        "title": "L2:DRAM Ratio",
+        "title": "L2 to DRAM Ratio",
         "y": "L2 to DRAM Ratio:Q",
         "color": "Memory Bus type:N",
         "tooltip": ["L2 Cache (MB)", "Memory Size (GB)", "L2 to DRAM Ratio"],
