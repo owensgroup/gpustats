@@ -107,24 +107,19 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
 
         # Intel Xe has "Arc X" rows that get translated into column names, delete
         df.columns = [re.sub(r" Arc [\w]*$", "", col) for col in df.columns.values]
-        # this is only to make sure the column names are not ending in #s
-        df = df.rename(
-            columns={
-                "GFLOPS FP32": "GFLOPS FP32_",
-                "MFLOPS FP32": "MFLOPS FP32_",
-            }
-        )
-
         # TODO this next one disappears
         # Get rid of 'Unnamed' column names
         # df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
         # for col in df.columns.values]
         # If a column-name word ends in a number or number,comma,number, delete
         # it
+        df = df.rename(columns={"L2 Cache (MB)": "L2_ Cache (MB)"})
         df.columns = [
             " ".join([re.sub(r"[\d,]+$", "", word) for word in col.split()])
             for col in df.columns.values
         ]
+        # now put back the ones we broke
+        df = df.rename(columns={"L2_ Cache (MB)": "L2 Cache (MB)"})
         # If a column-name word ends with one or more '[x]',
         # where 'x' is an upper- or lower-case letter or number, delete it
         df.columns = [
@@ -226,7 +221,9 @@ df = pd.concat(
 df = merge(
     df, "Processing power (GFLOPS) Single precision", "Processing power (GFLOPS)"
 )
-df = merge(df, "Processing power (GFLOPS) Single precision", "GFLOPS FP32_")
+df = merge(
+    df, "Processing power (GFLOPS) Single precision", "Performance (GFLOPS FP32)"
+)
 df = merge(
     df,
     "Processing power (GFLOPS) Single precision",
@@ -280,6 +277,8 @@ df = merge(df, "Core clock (MHz)", "Core Clock (MHz) Base")
 df = merge(df, "Core config", "Core Config")
 df = merge(df, "Transistors Die Size", "Transistors & Die Size")
 df = merge(df, "Transistors Die Size", "Transistors & die size")
+df = merge(df, "Memory Size (MB)", "Memory Size (MiB)")
+df = merge(df, "Memory Size (GB)", "Memory Size (GiB)")
 df = merge(df, "Memory Bus type", "Memory RAM type")
 df = merge(df, "Memory Bus type", "Memory Type")
 df = merge(df, "Memory Bus type", "Memory configuration DRAM type")
@@ -291,7 +290,7 @@ df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(
 )
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
-for col in ["Chips", "Code name", "Core config"]:
+for col in ["Code name", "Core config"]:
     df = df[~df[col].str.contains(r"^[2-9]\u00d7", re.UNICODE, na=False)]
 # filter out if Model ends in [xX]2 or is 2<times>
 df = df[~df["Model"].str.contains("[xX]2$", na=False)]
@@ -315,7 +314,7 @@ for prec in ["Single", "Double", "Half"]:
             df[col] = pd.to_numeric(df[col]) * 1000.0  # change to GFLOPS
             df = merge(df, destcol, col)
 
-for col in ["MFLOPS FP32_"]:
+for col in ["Performance (MFLOPS FP32)"]:
     if col in df.columns.values:
         destcol = f"Processing power (GFLOPS) Single precision"
         df[col] = df[col].astype(str)
@@ -380,8 +379,14 @@ for col in ["Model", "Transistors (million)"]:
     # then take 'em out of the middle too
     df[col] = df[col].str.replace(r"\[\d+\]", "", regex=True)
 
-# Simple treatment of Core clock and bus width: just grab the first number
-for col in ["Core clock (MHz)", "Memory Bus width (bit)"]:
+# Simple treatment of multiple columns: just grab the first number
+for col in [
+    "Core clock (MHz)",
+    "Memory Bus width (bit)",
+    "Memory Size (KiB)",
+    "Memory Size (MB)",
+    "Memory Size (GB)",
+]:
     df[col] = df[col].apply(lambda x: str(x))
     df[col] = df[col].str.extract(r"(\d+)")
 
@@ -400,13 +405,14 @@ df["Memory Bus type"] = df["Memory Bus type"].str.split("[").str[0]
 df.loc[df["Memory Bus type"] == "EDO", "Memory Bus type"] = "EDO VRAM"
 
 
-# merge and numerify transistor counts
-df["Transistors (billion)"] = df["Transistors (billion)"].fillna(
-    pd.to_numeric(df["Transistors (million)"], errors="coerce") / 1000.0
-)
-df["Transistors (billion)"] = pd.to_numeric(
-    df["Transistors (billion)"], errors="coerce"
-)
+# merge and numerify {transistor counts, memory size}
+for to, frm in [
+    ("Transistors (billion)", "Transistors (million)"),
+    ("Memory Size (MB)", "Memory Size (KiB)"),
+    ("Memory Size (GB)", "Memory Size (MB)"),
+]:
+    df[to] = df[to].fillna(pd.to_numeric(df[frm], errors="coerce") / 1000.0)
+    df[to] = pd.to_numeric(df[to], errors="coerce")
 
 # extract shader (processor) counts
 # df = merge(df, 'Core config',
@@ -469,6 +475,8 @@ df.loc[df["Model"] == "Radeon Pro V620 (Navi 21)", "TDP (Watts)"] = 300
 # also was useful to make sure columns can be converted to Arrow without errors
 for col in [
     "Memory Bandwidth (GB/s)",
+    "Memory Size (GB)",
+    "L2 Cache (MB)",
     "TDP (Watts)",
     "Fab (nm)",
     "Release Price (USD)",
@@ -500,6 +508,11 @@ df["Single-precision GFLOPS/mm2"] = pd.to_numeric(
 df["Memory Bandwidth per Pin (GB/s)"] = pd.to_numeric(
     df["Memory Bandwidth (GB/s)"], errors="coerce"
 ) / pd.to_numeric(df["Memory Bus width (bit)"], errors="coerce")
+df["L2 to DRAM Ratio"] = (
+    0.001
+    * pd.to_numeric(df["L2 Cache (MB)"], errors="coerce")
+    / pd.to_numeric(df["Memory Size (GB)"], errors="coerce")
+)
 
 # mark mobile processors
 df["GPU Type"] = np.where(
@@ -556,6 +569,24 @@ config = {
         "y": "Memory Bus width (bit):Q",
         "color": "Memory Bus type:N",
         "tooltip": ["Memory Bus type", "Memory Bus width (bit)"],
+    },
+    "memsz": {
+        "title": "Memory Capacity over Time",
+        "y": "Memory Size (GB):Q",
+        "color": "Memory Bus type:N",
+        "tooltip": ["Memory Size (GB)", "Memory Bus type"],
+    },
+    "l2": {
+        "title": "L2 Cache Size over Time",
+        "y": "L2 Cache (MB):Q",
+        "color": "Memory Bus type:N",
+        "tooltip": ["L2 Cache (MB)"],
+    },
+    "l2dram": {
+        "title": "L2:DRAM Ratio",
+        "y": "L2 to DRAM Ratio:Q",
+        "color": "Memory Bus type:N",
+        "tooltip": ["L2 Cache (MB)", "Memory Size (GB)", "L2 to DRAM Ratio"],
     },
     "bwpin": {
         "title": "Memory Bandwidth per Pin over Time",
@@ -621,11 +652,12 @@ config = {
     },
     "clk": {
         "title": "Clock rate over Time",
+        "df": df[df["Core clock (MHz)"].notnull()],
         "y": "Core clock (MHz):Q",
         "yscale": "linear",
         "shape": "GPU Type",
         "color": vendor_colormap,
-        "tooltip": ["Core clock (MHz)"],
+        "tooltip": ["Core clock (MHz)", "GPU Type"],
     },
     "cost": {
         "title": "Release price over Time",
@@ -649,8 +681,6 @@ config = {
     "fpw": {
         "title": "GFLOPS per Watt over Time",
         "color": "Fab (nm):N",
-        "x": "Single-precision GFLOPS:Q",
-        "xscale": "log",
         "y": "Single precision GFLOPS/Watt:Q",
         "shape": "Vendor",
         "tooltip": [
@@ -685,6 +715,7 @@ config = {
     },
     "ai": {
         "title": "Arithmetic Intensity over Time",
+        "df": df[df["Arithmetic intensity (FLOP/B)"].notnull()],
         "color": vendor_colormap,
         "y": "Arithmetic intensity (FLOP/B):Q",
         "shape": "GPU Type",
@@ -832,9 +863,8 @@ for key in config:
     # )
     c = config[key]
     title = c["title"]
-    chart = (
+    base = (
         alt.Chart(c["df"])
-        .mark_point()
         .encode(
             x=alt.X(
                 c["x"],
@@ -844,42 +874,67 @@ for key in config:
                 c["y"],
                 scale=alt.Scale(type=c["yscale"]),
             ),
-            # color=alt.condition(
-            #     selection,
-            #     alt.Color(c["color"]),
-            #     alt.value("lightgray"),
-            # ),
+        )
+        .properties(width=1213, height=750, title=title)
+    )
+    chart = (
+        base.mark_point()
+        .encode(
             color=c["color"],
             shape=c["shape"],
             opacity=alt.condition(combined_selection, alt.value(1.0), alt.value(0.1)),
             tooltip=c["tooltip"],
         )
-        .properties(width=1213, height=750, title=title)
         .interactive()
-        .add_params(color_selection)  # remove if saving lchart
-        .add_params(shape_selection)
-    )
-
-    regression_method = {"linear": "linear", "log": "exp"}
-
-    lchart = (
-        (
-            alt.layer(
-                chart,
-                chart.transform_regression(
-                    on=stripShorthand(c["x"]),
-                    regression=stripShorthand(c["y"]),
-                    # groupby=[stripShorthand(c["color"])],
-                    method=regression_method[c["yscale"]],
-                ).mark_line(),
-            )
-        )
         .add_params(color_selection)
         .add_params(shape_selection)
     )
 
+    # indexed by [xscale][yscale]
+    # there is no model for log-log
+    regression_method = {
+        "linear": {"linear": "linear", "log": "exp"},
+        "log": {"linear": "log", "log": None},
+    }
+
+    if False and regression_method[c["xscale"]][c["yscale"]]:
+        # we set lchart to layer (chart, base)
+        line_selection = alt.selection_point(encodings=["color"], bind="legend")
+        # bind_checkbox = alt.binding_checkbox(name="Toggle best-fit line")
+        # param_checkbox = alt.param(bind=bind_checkbox)
+        chart = (
+            alt.layer(
+                chart,
+                base.transform_regression(
+                    on=stripShorthand(c["x"]),
+                    regression=stripShorthand(c["y"]),
+                    # groupby=[stripShorthand(c["color"])],
+                    method=regression_method[c["xscale"]][c["yscale"]],
+                )
+                .mark_line(shape="mark", opacity=0.5)
+                .transform_fold(
+                    ["Best fit"],  # these cols get packed into one field w/ ...
+                    as_=["Regression", "y"],
+                ),  # [key, value]
+            )
+            .encode(
+                # opacity=alt.condition(param_checkbox, alt.value(1.0), alt.value(0.05)),
+                alt.Color("Regression:N"),
+            )
+            .interactive()
+            .add_params(line_selection)
+        )
+
+    # chart = (
+    #     chart.interactive()
+    #     .add_params(color_selection)
+    #     .add_params(shape_selection)
+    #     # .add_params(param_checkbox)
+    # )
+
     chart.save(os.path.join(outputdir, title + ".pdf"), engine="vl-convert")
     vf.save_html(chart, os.path.join(outputdir, title + ".html"))
+    # chart.save(os.path.join(outputdir, title + ".html"), inline=True)
     readme += f"- {title} [[html](plots/{title}.html), [pdf](plots/{title}.pdf)]\n"
 
 with open(os.path.join(outputdir, "../README.md"), "w") as f:
