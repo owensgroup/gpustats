@@ -5,6 +5,8 @@ Data sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/L
 - Memory Bandwidth over Time [[html](plots/Memory Bandwidth over Time.html), [pdf](plots/Memory Bandwidth over Time.pdf)]
 - Memory Bus Width over Time [[html](plots/Memory Bus Width over Time.html), [pdf](plots/Memory Bus Width over Time.pdf)]
 - Memory Capacity over Time [[html](plots/Memory Capacity over Time.html), [pdf](plots/Memory Capacity over Time.pdf)]
+- L2 Cache Size over Time [[html](plots/L2 Cache Size over Time.html), [pdf](plots/L2 Cache Size over Time.pdf)]
+- L2 to DRAM Ratio [[html](plots/L2 to DRAM Ratio.html), [pdf](plots/L2 to DRAM Ratio.pdf)]
 - Memory Bandwidth per Pin over Time [[html](plots/Memory Bandwidth per Pin over Time.html), [pdf](plots/Memory Bandwidth per Pin over Time.pdf)]
 - Processing Power over Time [[html](plots/Processing Power over Time.html), [pdf](plots/Processing Power over Time.pdf)]
 - SM count over Time [[html](plots/SM count over Time.html), [pdf](plots/SM count over Time.pdf)]
