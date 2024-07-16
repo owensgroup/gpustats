@@ -532,6 +532,20 @@ colormap = alt.Scale(
     domain=["AMD", "NVIDIA", "Intel"], range=["#ff0000", "#76b900", "#0071c5"]
 )
 
+dfpr = pd.DataFrame(
+    pd.melt(
+        df,
+        id_vars=["Launch", "Model", "GPU Type", "Vendor"],
+        value_vars=[
+            "Single-precision GFLOPS",
+            "Double-precision GFLOPS",
+            "Half-precision GFLOPS",
+        ],
+        var_name="Datatype",
+        value_name="Processing power (GFLOPS)",
+    ),
+)
+
 config_default = {
     "df": df,
     "x": "Launch:T",
@@ -553,6 +567,7 @@ vendor_colormap = alt.Color(
 
 config = {
     "bw": {
+        "df": df[df["Memory Bandwidth (GB/s)"].notnull()],
         "title": "Memory Bandwidth over Time",
         "y": "Memory Bandwidth (GB/s):Q",
         "color": "Memory Bus type:N",
@@ -577,18 +592,21 @@ config = {
         "tooltip": ["Memory Size (GB)", "Memory Bus type"],
     },
     "l2": {
+        "df": df[df["L2 Cache (MB)"].notnull()],
         "title": "L2 Cache Size over Time",
         "y": "L2 Cache (MB):Q",
         "color": "Memory Bus type:N",
         "tooltip": ["L2 Cache (MB)"],
     },
     "l2dram": {
+        "df": df[df["L2 to DRAM Ratio"].notnull()],
         "title": "L2 to DRAM Ratio",
         "y": "L2 to DRAM Ratio:Q",
         "color": "Memory Bus type:N",
         "tooltip": ["L2 Cache (MB)", "Memory Size (GB)", "L2 to DRAM Ratio"],
     },
     "bwpin": {
+        "df": df[df["Memory Bandwidth per Pin (GB/s)"].notnull()],
         "title": "Memory Bandwidth per Pin over Time",
         "y": "Memory Bandwidth per Pin (GB/s):Q",
         "color": "Memory Bus type:N",
@@ -600,22 +618,13 @@ config = {
     },
     "pr": {
         "title": "Processing Power over Time",
-        "df": pd.melt(
-            df,
-            id_vars=["Launch", "Model", "GPU Type", "Vendor"],
-            value_vars=[
-                "Single-precision GFLOPS",
-                "Double-precision GFLOPS",
-                "Half-precision GFLOPS",
-            ],
-            var_name="Datatype",
-            value_name="Processing power (GFLOPS)",
-        ),
+        "df": dfpr[dfpr["Processing power (GFLOPS)"].notnull()],
         "y": "Processing power (GFLOPS):Q",
         "color": "Datatype:N",
         "tooltip": ["Datatype", "Processing power (GFLOPS)"],
     },
     "sm": {
+        "df": df[df["SM count"].notnull()],
         "title": "SM count over Time",
         "y": "SM count:Q",
         "shape": "GPU Type",
@@ -624,13 +633,17 @@ config = {
     },
     "sh": {
         "title": "Shader count over Time",
-        "df": df[df["Pixel/unified shader count"] != 0],
+        "df": df[
+            df["Pixel/unified shader count"].notnull()
+            & (df["Pixel/unified shader count"] != 0)
+        ],
         "y": "Pixel/unified shader count:Q",
         "shape": "GPU Type",
         "color": vendor_colormap,
         "tooltip": ["Pixel/unified shader count"],
     },
     "die": {
+        "df": df[df["Die size (mm2)"].notnull()],
         "title": "Die Size over Time",
         "y": "Die size (mm2):Q",
         "shape": "GPU Type",
@@ -638,6 +651,7 @@ config = {
         "tooltip": ["Die size (mm2)"],
     },
     "xt": {
+        "df": df[df["Transistors (billion)"].notnull()],
         "title": "Transistor Count over Time",
         "y": "Transistors (billion):Q",
         "shape": "GPU Type",
@@ -660,6 +674,7 @@ config = {
         "tooltip": ["Core clock (MHz)", "GPU Type"],
     },
     "cost": {
+        "df": df[df["Release Price (USD)"].notnull()],
         "title": "Release price over Time",
         "y": "Release Price (USD):Q",
         "color": vendor_colormap,
@@ -667,6 +682,7 @@ config = {
         "tooltip": ["Release Price (USD)"],
     },
     "fperdollar": {
+        "df": df[df["Single precision GFLOPS/USD"].notnull()],
         "title": "GFLOPS per Dollar over Time",
         "y": "Single precision GFLOPS/USD:Q",
         "yscale": "linear",
@@ -679,6 +695,7 @@ config = {
         ],
     },
     "fpw": {
+        "df": df[df["Single precision GFLOPS/Watt"].notnull()],
         "title": "GFLOPS per Watt over Time",
         "color": "Fab (nm):N",
         "y": "Single precision GFLOPS/Watt:Q",
@@ -748,6 +765,7 @@ config = {
         ],
     },
     "pwr": {
+        "df": df[df["TDP (Watts)"].notnull()],
         "title": "Power over Time",
         "y": "TDP (Watts)",
         "shape": "Vendor:N",
@@ -755,6 +773,7 @@ config = {
         "tooltip": ["Fab (nm)", "TDP (Watts)"],
     },
     "pwrdens": {
+        "df": df[df["Watts/mm2"].notnull()],
         "title": "Power density over Time",
         "y": "Watts/mm2",
         "yscale": "linear",
@@ -763,6 +782,7 @@ config = {
         "tooltip": ["Fab (nm)", "TDP (Watts)", "Die size (mm2)", "Watts/mm2"],
     },
     "transdens": {
+        "df": df[df["Transistor Density (B/mm2)"].notnull()],
         "title": "Transistor density over Time",
         "y": "Transistor Density (B/mm2)",
         "shape": "Vendor:N",
@@ -911,11 +931,9 @@ for key in config:
                     # groupby=[stripShorthand(c["color"])],
                     method=regression_method[c["xscale"]][c["yscale"]],
                 )
-                .mark_line(shape="mark", opacity=0.5)
-                .transform_fold(
-                    ["Best fit"],  # these cols get packed into one field w/ ...
-                    as_=["Regression", "y"],
-                ),  # [key, value]
+                .mark_line(opacity=0.5)
+                .transform_calculate(Fit='"LinReg"')
+                .encode(stroke="Fit:N"),
             )
             .encode(
                 # opacity=alt.condition(param_checkbox, alt.value(1.0), alt.value(0.05)),
@@ -923,6 +941,7 @@ for key in config:
             )
             .interactive()
             .add_params(line_selection)
+            .resolve_scale(color="independent")
         )
 
     # chart = (
