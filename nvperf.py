@@ -10,6 +10,7 @@ import json
 from io import StringIO
 from joblib import Parallel, delayed
 import altair as alt
+import altair_transform  # https://stackoverflow.com/questions/67808483/get-altair-regression-parameters (installed 0.3.0dev0)
 from collections import Counter
 import vl_convert as vlc
 import vegafusion as vf
@@ -113,13 +114,13 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # for col in df.columns.values]
         # If a column-name word ends in a number or number,comma,number, delete
         # it
-        df = df.rename(columns={"L2 Cache (MB)": "L2_ Cache (MB)"})
+        df = df.rename(columns={"L2 Cache (MiB)": "L2_ Cache (MiB)"})
         df.columns = [
             " ".join([re.sub(r"[\d,]+$", "", word) for word in col.split()])
             for col in df.columns.values
         ]
         # now put back the ones we broke
-        df = df.rename(columns={"L2_ Cache (MB)": "L2 Cache (MB)"})
+        df = df.rename(columns={"L2_ Cache (MiB)": "L2 Cache (MiB)"})
         # If a column-name word ends with one or more '[x]',
         # where 'x' is an upper- or lower-case letter or number, delete it
         df.columns = [
@@ -224,18 +225,6 @@ df = merge(
 df = merge(
     df, "Processing power (GFLOPS) Single precision", "Performance (GFLOPS FP32)"
 )
-df = merge(
-    df,
-    "Processing power (GFLOPS) Single precision",
-    "Processing power (GFLOPS) Single precision (MAD or FMA)",
-    replaceNoWithNaN=True,
-)
-df = merge(
-    df,
-    "Processing power (GFLOPS) Double precision",
-    "Processing power (GFLOPS) Double precision (FMA)",
-    replaceNoWithNaN=True,
-)
 df = merge(df, "Memory Bandwidth (GB/s)", "Memory configuration Bandwidth (GB/s)")
 df = merge(df, "TDP (Watts)", "TDP (Watts) Max.")
 df = merge(df, "TDP (Watts)", "TDP (Watts) Max")
@@ -305,6 +294,8 @@ for prec in ["Single", "Double", "Half"]:
         f"Processing power (TFLOPS) {prec} precision",
         f"Processing power (TFLOPS) {prec} precision (base)",
         f"Processing power (TFLOPS) {prec} precision (boost)",
+        f"Processing power (GFLOPS) {prec} precision (MAD or FMA)",
+        f"Processing power (GFLOPS) {prec} precision (FMA)",
     ]:
         if col in df.columns.values:
             destcol = f"Processing power (GFLOPS) {prec} precision"
@@ -388,7 +379,7 @@ for col in [
     "Memory Size (GB)",
 ]:
     df[col] = df[col].apply(lambda x: str(x))
-    df[col] = df[col].str.extract(r"(\d+)")
+    df[col] = df[col].str.extract(r"(\d*\.\d+|\d+)")
 
 # strip out bit width from combined column
 df = merge(df, "Memory Bus type & width (bit)", "Memory Bus type & width")
@@ -476,7 +467,7 @@ df.loc[df["Model"] == "Radeon Pro V620 (Navi 21)", "TDP (Watts)"] = 300
 for col in [
     "Memory Bandwidth (GB/s)",
     "Memory Size (GB)",
-    "L2 Cache (MB)",
+    "L2 Cache (MiB)",
     "TDP (Watts)",
     "Fab (nm)",
     "Release Price (USD)",
@@ -510,7 +501,7 @@ df["Memory Bandwidth per Pin (GB/s)"] = pd.to_numeric(
 ) / pd.to_numeric(df["Memory Bus width (bit)"], errors="coerce")
 df["L2 to DRAM Ratio"] = (
     0.001
-    * pd.to_numeric(df["L2 Cache (MB)"], errors="coerce")
+    * pd.to_numeric(df["L2 Cache (MiB)"], errors="coerce")
     / pd.to_numeric(df["Memory Size (GB)"], errors="coerce")
 )
 
@@ -592,18 +583,18 @@ config = {
         "tooltip": ["Memory Size (GB)", "Memory Bus type"],
     },
     "l2": {
-        "df": df[df["L2 Cache (MB)"].notnull()],
+        "df": df[df["L2 Cache (MiB)"].notnull()],
         "title": "L2 Cache Size over Time",
-        "y": "L2 Cache (MB):Q",
+        "y": "L2 Cache (MiB):Q",
         "color": "Memory Bus type:N",
-        "tooltip": ["L2 Cache (MB)"],
+        "tooltip": ["L2 Cache (MiB)"],
     },
     "l2dram": {
         "df": df[df["L2 to DRAM Ratio"].notnull()],
         "title": "L2 to DRAM Ratio",
         "y": "L2 to DRAM Ratio:Q",
         "color": "Memory Bus type:N",
-        "tooltip": ["L2 Cache (MB)", "Memory Size (GB)", "L2 to DRAM Ratio"],
+        "tooltip": ["L2 Cache (MiB)", "Memory Size (GB)", "L2 to DRAM Ratio"],
     },
     "bwpin": {
         "df": df[df["Memory Bandwidth per Pin (GB/s)"].notnull()],
@@ -934,15 +925,40 @@ for key in config:
                 .mark_line(opacity=0.5)
                 .transform_calculate(Fit='"LinReg"')
                 .encode(stroke="Fit:N"),
+                base.transform_regression(
+                    on=stripShorthand(c["x"]),
+                    regression=stripShorthand(c["y"]),
+                    # groupby=[stripShorthand(c["color"])],
+                    method=regression_method[c["xscale"]][c["yscale"]],
+                    params=True,
+                )
+                .mark_text(align="left", lineBreak="\n")
+                .encode(
+                    x=alt.value(150),  # pixels from left
+                    y=alt.value(250),  # pixels from top
+                    text="params:N",
+                )
+                .transform_calculate(
+                    params='"r² = " + round(datum.rSquared * 100)/100 + \
+    "      y = " + round(datum.coef[0] * 10)/10 + " + e ^ (" + \
+    round(datum.coef[1] * 10000)/10000 + "x" + ")" + \n + " "'
+                ),
             )
             .encode(
                 # opacity=alt.condition(param_checkbox, alt.value(1.0), alt.value(0.05)),
-                alt.Color("Regression:N"),
+                # alt.Color("Regression:N"),
             )
             .interactive()
             .add_params(line_selection)
             .resolve_scale(color="independent")
         )
+        # b = base.transform_regression(
+        #     on=stripShorthand(c["x"]),
+        #     regression=stripShorthand(c["y"]),
+        #     method=regression_method[c["xscale"]][c["yscale"]],
+        #     params=True,
+        # ).mark_line()
+        # print(title, altair_transform.extract_data(b))
 
     # chart = (
     #     chart.interactive()
