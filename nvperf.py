@@ -79,6 +79,9 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
     )
     # purge tables with <= 2 columns, because they're not real/helpful
     dfs = [df for df in dfs if len(df.columns.values) > 2]
+    dfs = [df for df in dfs if df.columns[0] != 'GeForce RTX'] ### XXX fix this is a weird transposed table
+    #### dfs = [df.transpose(copy=True) if not df.empty and df.columns[0] == 'GeForce RTX' else df for df in dfs]
+
     for idx, df in enumerate(dfs):
         # Multi-index to index
 
@@ -227,8 +230,6 @@ df = merge(
 )
 df = merge(df, "Memory Bandwidth (GB/s)", "Memory configuration Bandwidth (GB/s)")
 df = merge(df, "TDP (Watts)", "TDP (Watts) Max.")
-df = merge(df, "TDP (Watts)", "TDP (Watts) Max")
-df = merge(df, "TDP (Watts)", "TBP (W)")
 df = merge(df, "TDP (Watts)", "TDP (W)")
 df = merge(df, "TDP (Watts)", "Combined TDP Max. (W)")
 df = merge(df, "TDP (Watts)", "TDP /idle (Watts)")
@@ -240,10 +241,8 @@ for col in ["TBP", "TDP"]:
     )
     df = merge(df, "TDP (Watts)", f"{col} (extracted)")
 
-df = merge(df, "Model", "Model (Architecture)")  # could separate out uarch
 df = merge(df, "Model", "Model (Codename)")
 df = merge(df, "Model", "Model (Code name)")
-df = merge(df, "Model", "Model (codename)")
 df = merge(df, "Model", "Code name (console model)")
 df = merge(df, "Model", "Branding and Model")
 # df = merge(df, 'Model', 'Chip (Device)')
@@ -261,10 +260,8 @@ df = merge(df, "Core clock (MHz)", "Clock speed Average (MHz)")
 df = merge(df, "Core clock (MHz)", "Core Clock rate (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock rate (MHz) Core (MHz)")
 df = merge(df, "Core clock (MHz)", "Clock speed Shader (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock speeds  Base core (MHz)")
 df = merge(df, "Core clock (MHz)", "Core Clock (MHz) Base")
 df = merge(df, "Core config", "Core Config")
-df = merge(df, "Transistors Die Size", "Transistors & Die Size")
 df = merge(df, "Transistors Die Size", "Transistors & die size")
 df = merge(df, "Memory Size (MB)", "Memory Size (MiB)")
 df = merge(df, "Memory Size (GB)", "Memory Size (GiB)")
@@ -422,7 +419,6 @@ df["Pixel/unified shader count"] = pd.to_numeric(
     df["Pixel/unified shader count"], downcast="integer", errors="coerce"
 )
 df = merge(df, "Pixel/unified shader count", "Stream processors")
-df = merge(df, "Pixel/unified shader count", "Shaders CUDA cores (total)")
 df = merge(df, "Pixel/unified shader count", "Shading units")  # Intel
 # note there might be zeroes
 
@@ -968,8 +964,8 @@ for key in config:
     # )
 
     chart.save(os.path.join(outputdir, title + ".pdf"), engine="vl-convert")
-    vf.save_html(chart, os.path.join(outputdir, title + ".html"))
-    # chart.save(os.path.join(outputdir, title + ".html"), inline=True)
+    # vf.save_html(chart, os.path.join(outputdir, title + ".html"))
+    chart.save(os.path.join(outputdir, title + ".html"), inline=True)
     readme += f"- {title} [[html](plots/{title}.html), [pdf](plots/{title}.pdf)]\n"
 
 with open(os.path.join(outputdir, "../README.md"), "w") as f:
