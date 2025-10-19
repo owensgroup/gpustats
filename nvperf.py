@@ -506,6 +506,10 @@ df["Single precision GFLOPS/USD"] = (
     pd.to_numeric(df["Single-precision GFLOPS"], errors="coerce")
     / df["Release Price (USD)"]
 )
+df["Memory Bandwidth (GB/s)/USD"] = (
+    pd.to_numeric(df["Memory Bandwidth (GB/s)"], errors="coerce")
+    / df["Release Price (USD)"]
+)
 df["Watts/mm2"] = pd.to_numeric(df["TDP (Watts)"], errors="coerce") / pd.to_numeric(
     df["Die size (mm2)"], errors="coerce"
 )
@@ -702,6 +706,19 @@ config = {
             "Single-precision GFLOPS",
             "Release Price (USD)",
             "Single precision GFLOPS/USD",
+        ],
+    },
+    "bwperdollar": {
+        "df": df[df["Memory Bandwidth (GB/s)/USD"].notnull()],
+        "title": "Memory Bandwidth per Dollar over Time",
+        "y": "Memory Bandwidth (GB/s)/USD:Q",
+        "yscale": "linear",
+        "color": vendor_colormap,
+        "shape": "GPU Type",
+        "tooltip": [            
+            "Release Price (USD)",
+            "Memory Bandwidth (GB/s)",
+            "Single-precision GFLOPS",
         ],
     },
     "fpw": {

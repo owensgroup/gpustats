@@ -17,6 +17,7 @@ Data sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/L
 - Clock rate over Time [[html](plots/Clock rate over Time.html), [pdf](plots/Clock rate over Time.pdf)]
 - Release price over Time [[html](plots/Release price over Time.html), [pdf](plots/Release price over Time.pdf)]
 - GFLOPS per Dollar over Time [[html](plots/GFLOPS per Dollar over Time.html), [pdf](plots/GFLOPS per Dollar over Time.pdf)]
+- Memory Bandwidth per Dollar over Time [[html](plots/Memory Bandwidth per Dollar over Time.html), [pdf](plots/Memory Bandwidth per Dollar over Time.pdf)]
 - GFLOPS per Watt over Time [[html](plots/GFLOPS per Watt over Time.html), [pdf](plots/GFLOPS per Watt over Time.pdf)]
 - GFLOPS per Watt vs. Peak Processing Power [[html](plots/GFLOPS per Watt vs. Peak Processing Power.html), [pdf](plots/GFLOPS per Watt vs. Peak Processing Power.pdf)]
 - GFLOPS per Watt vs. Memory Bandwidth [[html](plots/GFLOPS per Watt vs. Memory Bandwidth.html), [pdf](plots/GFLOPS per Watt vs. Memory Bandwidth.pdf)]
