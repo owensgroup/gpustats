@@ -90,6 +90,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
     html = re.sub("\u2013", "-", html)  # en-dash -> '-'
     html = re.sub("\u2014", "", html)  # delete em-dash (indicates empty cell)
     html = re.sub(r"mm<sup>2</sup>", "mm2", html)  # mm^2 -> mm2
+    html = re.sub("<span[^>]*>\u00d7</span>", "\u00d7", html)  # unwrap × from span styling
     html = re.sub("\u00d710<sup>6</sup>", "\u00d7106", html)  # 10^6 -> 106
     html = re.sub("\u00d710<sup>9</sup>", "\u00d7109", html)  # 10^9 -> 109
     html = re.sub(r"<sup>[\d\*]+</sup>", "", html)  # delete footnotes (num or *)
@@ -197,6 +198,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
                 "Architecture Fab": "Architecture & Fab",
                 "Architecture (Fab)": "Architecture & Fab",
                 "Processing power (TFLOPS) Bfloat16": "Processing power (TFLOPS) Half precision",
+                "Die Size (mm2)": "Die size (mm2)",
             }
         )
 
