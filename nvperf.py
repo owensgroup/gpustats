@@ -16,6 +16,7 @@ import vl_convert as vlc
 import vegafusion as vf
 
 pd.set_option("display.max_columns", None)
+pd.set_option("future.no_silent_downcasting", True)
 
 data = {
     "NVIDIA": {
@@ -42,11 +43,16 @@ referencesAtEnd = r"(?:\s*\[[a-z\d]+\])+(?:\d+,)?(?:\d+)?$"
 referencesOnlyAtEnd = r"(?:\s*\[[a-z\d]+\])+$"
 
 
-def merge(df, dst, src, replaceNoWithNaN=False, delete=True):
+def merge(df, dst, src, replaceNoWithNaN=False, delete=True, silentlySkip=True):
+    if silentlySkip and src not in df.columns:
+        return df
     df[src] = df[src].replace("\u2014", np.nan)  # em-dash
     if replaceNoWithNaN:
         df[src] = df[src].replace("No", np.nan)
-    df[dst] = df[dst].fillna(df[src])
+    if dst not in df.columns:
+        df[dst] = df[src]
+    else:
+        df[dst] = df[dst].fillna(df[src])
     if delete:
         df.drop(src, axis=1, inplace=True)
     return df
@@ -186,6 +192,7 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
             columns={
                 "Release date & price": "Release Date & Price",
                 "Release date": "Launch",
+                "Launch Date": "Launch",
                 "Architecture & fab": "Architecture & Fab",
                 "Architecture Fab": "Architecture & Fab",
                 "Architecture (Fab)": "Architecture & Fab",
@@ -242,17 +249,74 @@ df = pd.concat(
 # print(list(df))
 
 # merge related columns
-df = merge(
-    df, "Processing power (GFLOPS) Single precision", "Processing power (GFLOPS)"
-)
-df = merge(
-    df, "Processing power (GFLOPS) Single precision", "Performance (GFLOPS FP32)"
-)
-df = merge(df, "Memory Bandwidth (GB/s)", "Memory configuration Bandwidth (GB/s)")
-df = merge(df, "TDP (Watts)", "TDP (Watts) Max.")
-df = merge(df, "TDP (Watts)", "TDP (W)")
-df = merge(df, "TDP (Watts)", "Combined TDP Max. (W)")
-df = merge(df, "TDP (Watts)", "TDP /idle (Watts)")
+merge_map = {
+    "Processing power (GFLOPS) Single precision": [
+        "Processing power (GFLOPS)",
+        "Performance (GFLOPS FP32)",
+    ],
+    "Memory Bandwidth (GB/s)": [
+        "Memory configuration Bandwidth (GB/s)",
+    ],
+    "TDP (Watts)": [
+        "TDP (Watts) Max.",
+        "TDP (W)",
+        "Combined TDP Max. (W)",
+        "TDP /idle (Watts)",
+    ],
+    "Model": [
+        "Model (Codename)",
+        "Model (Code name)",
+        "Model name",
+        "Code name (console model)",
+        "Branding and Model",
+        # "Chip (Device)",
+        "Model: Mobility Radeon",  # replace when AMD page updated
+    ],
+    "Core clock (MHz)": [
+        "Shaders Base clock (MHz)",
+        "Shader clock (MHz)",
+        "Clock rate Base (MHz)",
+        "Clock rate (MHz)",
+        "Clock speeds Base core clock (MHz)",
+        "Core Clock (MHz)",
+        "Clock rate Core (MHz)",
+        "Clock speed Core (MHz)",
+        "Clock speed Average (MHz)",
+        "Core Clock rate (MHz)",
+        "Clock rate (MHz) Core (MHz)",
+        "Clock speed Shader (MHz)",
+        "Core Clock (MHz) Base",
+    ],
+    "Core config": [
+        "Core Config",
+        "Shaders Core config",
+    ],
+    "Transistors Die Size": [
+        "Transistors & die size",
+    ],
+    "Memory Size (MB)": [
+        "Memory Size (MiB)",
+    ],
+    "Memory Size (GB)": [
+        "Memory Size (GiB)",
+    ],
+    "Memory Bus type": [
+        "Memory RAM type",
+        "Memory Type",
+        "Memory configuration DRAM type",
+    ],
+    "Memory Bus width (bit)": [
+        "Memory configuration Bus width (bit)",
+    ],
+    "Release Price (USD)": [
+        "Release price (USD)",
+        "Release price (USD) MSRP",
+    ],
+}
+for dst, srcs in merge_map.items():
+    for src in srcs:
+        df = merge(df, dst, src)
+
 df = df.copy()  # this unfragments the df, better performance
 # get only the number out of {TBP,TDP}
 for col in ["TBP", "TDP"]:
@@ -261,37 +325,6 @@ for col in ["TBP", "TDP"]:
     )
     df = merge(df, "TDP (Watts)", f"{col} (extracted)")
 
-df = merge(df, "Model", "Model (Codename)")
-df = merge(df, "Model", "Model (Code name)")
-df = merge(df, "Model", "Model name")
-df = merge(df, "Model", "Code name (console model)")
-df = merge(df, "Model", "Branding and Model")
-# df = merge(df, 'Model', 'Chip (Device)')
-# replace when AMD page updated
-df = merge(df, "Model", "Model: Mobility Radeon")
-df = merge(df, "Core clock (MHz)", "Shaders Base clock (MHz)")
-df = merge(df, "Core clock (MHz)", "Shader clock (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock rate Base (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock rate (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock speeds Base core clock (MHz)")
-df = merge(df, "Core clock (MHz)", "Core Clock (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock rate Core (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock speed Core (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock speed Average (MHz)")
-df = merge(df, "Core clock (MHz)", "Core Clock rate (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock rate (MHz) Core (MHz)")
-df = merge(df, "Core clock (MHz)", "Clock speed Shader (MHz)")
-df = merge(df, "Core clock (MHz)", "Core Clock (MHz) Base")
-df = merge(df, "Core config", "Core Config")
-df = merge(df, "Transistors Die Size", "Transistors & die size")
-df = merge(df, "Memory Size (MB)", "Memory Size (MiB)")
-df = merge(df, "Memory Size (GB)", "Memory Size (GiB)")
-df = merge(df, "Memory Bus type", "Memory RAM type")
-df = merge(df, "Memory Bus type", "Memory Type")
-df = merge(df, "Memory Bus type", "Memory configuration DRAM type")
-df = merge(df, "Memory Bus width (bit)", "Memory configuration Bus width (bit)")
-df = merge(df, "Release Price (USD)", "Release price (USD)")
-df = merge(df, "Release Price (USD)", "Release price (USD) MSRP")
 df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(
     r"\$?([\d,]+)", expand=False
 )
@@ -445,7 +478,14 @@ df = merge(df, "Pixel/unified shader count", "Stream processors")
 df = merge(df, "Pixel/unified shader count", "Shading units")  # Intel
 # note there might be zeroes
 
-df = merge(df, "SM count", "Xe cores")
+# Extract Xe core counts from Intel Xe tables
+for col, pattern in [
+    ("Core config", r"(\d+) Xe cores"),  # Alchemist (Xe)
+    ("Core Core Config", r"(\d+) Xe2-cores"),  # Battlemage (Xe2)
+]:
+    if col in df.columns:
+        df["SM count (extracted)"] = df[col].str.extract(pattern, expand=False)
+        df = merge(df, "SM count", "SM count (extracted)")
 df["SM count (extracted)"] = df["Core config"].str.extract(
     r"\((\d+ SM[MX])\)", expand=False
 )
@@ -746,7 +786,11 @@ config = {
         "color": vendor_colormap,
         "y": "Arithmetic intensity (FLOP/B):Q",
         "shape": "GPU Type",
-        "tooltip": ["Arithmetic intensity (FLOP/B)"],
+        "tooltip": [
+            "Arithmetic intensity (FLOP/B)",
+            "Single-precision GFLOPS",
+            "Memory Bandwidth (GB/s)",
+        ],
     },
     "aisp": {
         "title": "Arithmetic Intensity vs. Peak Processing Power",
@@ -814,6 +858,9 @@ config = {
             "Fab (nm)",
             "Die size (mm2)",
             "Transistor Density (B/mm2)",
+            "Single-precision GFLOPS",
+            "TDP (Watts)",
+            "Die size (mm2)",
             "Single precision GFLOPS/Watt",
             "Single-precision GFLOPS/mm2",
         ],
