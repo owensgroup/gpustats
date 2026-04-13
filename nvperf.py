@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import warnings
 import pandas as pd
 import numpy as np
 import itertools
@@ -10,13 +11,14 @@ import json
 from io import StringIO
 from joblib import Parallel, delayed
 import altair as alt
-import altair_transform  # https://stackoverflow.com/questions/67808483/get-altair-regression-parameters (installed 0.3.0dev0)
 from collections import Counter
-import vl_convert as vlc
-import vegafusion as vf
 
+warnings.filterwarnings(
+    "ignore",
+    message="Downcasting object dtype arrays",
+    category=FutureWarning,
+)
 pd.set_option("display.max_columns", None)
-pd.set_option("future.no_silent_downcasting", True)
 
 data = {
     "NVIDIA": {
@@ -52,7 +54,7 @@ def merge(df, dst, src, replaceNoWithNaN=False, delete=True, silentlySkip=True):
     if dst not in df.columns:
         df[dst] = df[src]
     else:
-        df[dst] = df[dst].fillna(df[src])
+        df[dst] = df[dst].fillna(df[src]).infer_objects(copy=False)
     if delete:
         df.drop(src, axis=1, inplace=True)
     return df
@@ -878,42 +880,6 @@ for key in config:
 for key in config:
     # d | other: The values of other take priority when d and other share keys.
     config[key] = config_default | config[key]
-
-template = """<!DOCTYPE html>
-<html>
-<head>
-  <!-- Import vega & vega-Lite (does not have to be from CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
-  <!-- Import vega-embed -->
-  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-  <title>{title}</title>
-
-  <style media="screen">
-    /* Add space between vega-embed links */
-    /* http://vega.github.io/vega-tutorials/airports/ */
-    .vega-embed .vega-actions a {{
-      margin-left: 1em;
-      visibility: hidden;
-    }}
-    .vega-embed:hover .vega-actions a {{
-      visibility: visible;
-    }}
-  </style>
-</head>
-<body>
-
-<div id="vis"></div>
-
-<script type="text/javascript">
-  var opt = {{
-    "mode": "vega-lite",
-  }};
-  vegaEmbed('#vis', {spec}, opt).catch(console.warn);
-</script>
-</body>
-</html>"""
-
 readme = "# GPU Statistics\n\nData sourced from [Wikipedia's NVIDIA GPUs page](https://en.wikipedia.org/wiki/List_of_Nvidia_graphics_processing_units), [Wikipedia's AMD GPUs page](https://en.wikipedia.org/wiki/List_of_AMD_graphics_processing_units), and [Wikipedia's Intel Xe page](https://en.wikipedia.org/wiki/Intel_Xe).\n\n"
 
 script_dir = os.path.dirname(os.path.realpath("__file__"))
