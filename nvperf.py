@@ -271,6 +271,7 @@ merge_map = {
         "Model (Codename)",
         "Model (Code name)",
         "Model name",
+        "Model name (Architecture)",
         "Code name (console model)",
         "Branding and Model",
         # "Chip (Device)",
@@ -330,7 +331,7 @@ for col in ["TBP", "TDP"]:
     df = merge(df, "TDP (Watts)", f"{col} (extracted)")
 
 df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(
-    r"\$?([\d,]+)", expand=False
+    r"^\$?([\d,]+)", expand=False
 )
 
 # filter out {Chips, Code name, Core config}: '^[2-9]\u00d7'
@@ -436,6 +437,7 @@ for col in [
     "Memory Size (GB)",
 ]:
     df[col] = df[col].apply(lambda x: str(x))
+    df[col] = df[col].str.replace(",", "")
     df[col] = df[col].str.extract(r"(\d*\.\d+|\d+)")
 
 # strip out bit width from combined column
