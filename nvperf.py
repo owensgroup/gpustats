@@ -63,6 +63,40 @@ def merge(df, dst, src, replaceNoWithNaN=False, delete=True, silentlySkip=True):
     return df
 
 
+# Map of unit suffix -> multiplier to reach the "base" unit. The base unit is
+# context-dependent (MiB for cache, GFLOPS for compute) \u2014 callers pick a unit
+# table compatible with their column.
+UNIT_MIB = {  # base = MiB (binary)
+    "KB": 1.0 / 1024.0, "KiB": 1.0 / 1024.0,
+    "MB": 1.0,          "MiB": 1.0,
+    "GB": 1024.0,       "GiB": 1024.0,
+}
+
+
+def to_number(series, scale=1.0, unit_pattern=None, unit_table=None,
+              anchored=True):
+    """Extract a numeric value from each cell of `series` and return a float Series.
+
+    Strips commas, then either:
+      - extracts the leading number and applies `scale` (default), or
+      - extracts (number, unit) and multiplies by unit_table[unit] when
+        `unit_pattern` is given (e.g. "KB|MB|MiB|GB|GiB").
+
+    `anchored` controls whether the number must be at the start of the cell
+    (True) or can appear anywhere (False \u2014 first match wins)."""
+    s = series.astype(str).str.replace(",", "")
+    num_re = r"(\d*\.\d+|\d+)"
+    if anchored:
+        num_re = "^" + num_re
+    if unit_pattern:
+        m = s.str.extract(rf"{num_re}\s*({unit_pattern})", expand=True)
+        return pd.to_numeric(m[0], errors="coerce") * m[1].map(unit_table)
+    return (
+        pd.to_numeric(s.str.extract(num_re, expand=False), errors="coerce")
+        * scale
+    )
+
+
 for vendor in ["NVIDIA", "AMD", "Intel"]:
     # requests.get handles https
     html = ""
@@ -334,32 +368,22 @@ for col in ["TBP", "TDP"]:
 # Normalize L2 cache columns into "L2 Cache (MiB)". Wikipedia uses many
 # spellings; NVIDIA puts units in the column header, Intel puts them in cells.
 # MB is treated as MiB (within ~5%, matches existing convention).
-for src, factor in [
+for src, scale in [
     ("Cache L2 (MiB)", 1.0),
     ("L2 Cache(MiB)", 1.0),
     ("Cache L2 (MB)", 1.0),
     ("Cache L2 (KB)", 1.0 / 1024.0),
 ]:
     if src in df.columns:
-        df[f"{src} (extracted)"] = (
-            pd.to_numeric(df[src].astype(str).str.replace(",", ""), errors="coerce")
-            * factor
-        )
-        df = merge(df, "L2 Cache (MiB)", f"{src} (extracted)")
+        df[src] = to_number(df[src], scale=scale)
+        df = merge(df, "L2 Cache (MiB)", src)
 for src in ["L2 cache", "Cache L2"]:
     if src in df.columns:
-        m = df[src].astype(str).str.extract(
-            r"([\d.]+)\s*(KB|KiB|MB|MiB|GB|GiB)", expand=True
+        df[src] = to_number(
+            df[src], unit_pattern="KB|KiB|MB|MiB|GB|GiB",
+            unit_table=UNIT_MIB, anchored=False,
         )
-        unit_to_mib = {
-            "KB": 1.0 / 1024.0, "KiB": 1.0 / 1024.0,
-            "MB": 1.0, "MiB": 1.0,
-            "GB": 1024.0, "GiB": 1024.0,
-        }
-        df[f"{src} (extracted)"] = pd.to_numeric(m[0], errors="coerce") * m[1].map(
-            unit_to_mib
-        )
-        df = merge(df, "L2 Cache (MiB)", f"{src} (extracted)")
+        df = merge(df, "L2 Cache (MiB)", src)
 
 df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(
     r"^\$?([\d,]+)", expand=False
@@ -376,64 +400,57 @@ for col in ["Transistors (million)", "Die size (mm2)", "Core config"]:
     df = df[~df[col].str.contains(r"\u00d7[2-9]$", re.UNICODE, na=False)]
     df = df[~df[col].str.contains(r"^2x", re.UNICODE, na=False)]
 
+# Normalize per-precision GFLOPS columns. Multiple Wikipedia source-column
+# shapes need merging into "Processing power (GFLOPS) {prec} precision",
+# each with a known unit scale. Order across precisions is preserved (matches
+# original code): all-precs TFLOPS pass, then MFLOPS-only-Single, then Boost
+# pass with cleanup and rename.
+flops_tflops_sources = [
+    # (column-name template, scale to GFLOPS)
+    ("Processing power TFLOPS {prec}",                          1000),
+    ("Processing power (TFLOPS) {prec}",                        1000),
+    ("Processing power (TFLOPS) {prec} precision",              1000),
+    ("Processing power (TFLOPS) {prec} precision (base)",       1000),
+    ("Processing power (TFLOPS) {prec} precision (boost)",      1000),
+    # XXX preserved-behavior: these say (GFLOPS) but are scaled by 1000.
+    # Possibly a bug in the original — investigate whether source cells are
+    # actually in TFLOPS despite the column name claiming GFLOPS.
+    ("Processing power (GFLOPS) {prec} precision (MAD or FMA)", 1000),
+    ("Processing power (GFLOPS) {prec} precision (FMA)",        1000),
+]
 for prec in ["Single", "Double", "Half"]:
-    for col in [
-        f"Processing power TFLOPS {prec}",
-        f"Processing power (TFLOPS) {prec}",
-        f"Processing power (TFLOPS) {prec} precision",
-        f"Processing power (TFLOPS) {prec} precision (base)",
-        f"Processing power (TFLOPS) {prec} precision (boost)",
-        f"Processing power (GFLOPS) {prec} precision (MAD or FMA)",
-        f"Processing power (GFLOPS) {prec} precision (FMA)",
-    ]:
-        if col in df.columns.values:
-            destcol = f"Processing power (GFLOPS) {prec} precision"
-            df[col] = df[col].astype(str)
-            df[col] = df[col].str.replace(",", "")  # get rid of commas
-            df[col] = df[col].str.extract(r"^([\d\.]+)", expand=False)
-            df[col] = pd.to_numeric(df[col]) * 1000.0  # change to GFLOPS
-            df = merge(df, destcol, col)
+    dst = f"Processing power (GFLOPS) {prec} precision"
+    for tmpl, scale in flops_tflops_sources:
+        src = tmpl.format(prec=prec)
+        if src in df.columns:
+            df[src] = to_number(df[src], scale=scale)
+            df = merge(df, dst, src)
 
-for col in ["Performance (MFLOPS FP32)"]:
-    if col in df.columns.values:
-        destcol = f"Processing power (GFLOPS) Single precision"
-        df[col] = df[col].astype(str)
-        df[col] = df[col].str.replace(",", "")  # get rid of commas
-        df[col] = df[col].str.extract(r"^([\d\.]+)", expand=False)
-        df[col] = pd.to_numeric(df[col]) / 1000.0  # change to GFLOPS
-        df = merge(df, destcol, col)
+# MFLOPS only applies to single precision
+src = "Performance (MFLOPS FP32)"
+if src in df.columns:
+    df[src] = to_number(df[src], scale=1.0 / 1000.0)
+    df = merge(df, "Processing power (GFLOPS) Single precision", src)
 
-# merge GFLOPS columns with "Boost" column headers and rename
-for prec in ["Single", "Double", "Half"]:  # single before others for '1/16 SP'
-    col = "Processing power (GFLOPS) %s precision" % prec
-    spcol = "%s-precision GFLOPS" % "Single"
-    # if prec != 'Half':
-    #   df = merge(
-    #   df, col, 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 2.0)' % prec)
-    for (
-        srccol
-    ) in [  # 'Processing power (GFLOPS) %s precision Base Core (Base Boost) (Max Boost 3.0)',
-        # 'Processing power (GFLOPS) %s precision R/F.E Base Core Reference (Base Boost) F.E. (Base Boost) R/F.E. (Max Boost 4.0)',
-        "Processing power (GFLOPS) %s"
-    ]:
-        df = merge(df, col, srccol % prec)
+# Boost: "Processing power (GFLOPS) {prec}" merge, plus cross-precision
+# refs ("1/16 SP", "2x SP"), final cleanup, and rename. Single precision is
+# processed first so spcol is set before Half/Double consult it.
+for prec in ["Single", "Double", "Half"]:
+    dst = f"Processing power (GFLOPS) {prec} precision"
+    spcol = "Single-precision GFLOPS"
+    src = f"Processing power (GFLOPS) {prec}"
+    if src in df.columns:
+        df[src] = to_number(df[src], scale=1.0)
+        df = merge(df, dst, src)
 
-    # handle weird references to single-precision column
     if prec != "Single":
-        df.loc[df[col] == "1/16 SP", col] = pd.to_numeric(df[spcol]) / 16
-        df.loc[df[col] == "2x SP", col] = pd.to_numeric(df[spcol]) * 2
-    # pick the first number we see as the actual number
-    df[col] = df[col].astype(str)
-    df[col] = df[col].str.replace(",", "")  # get rid of commas
-    df[col] = df[col].str.extract(r"^([\d\.]+)", expand=False)
+        df.loc[df[dst] == "1/16 SP", dst] = pd.to_numeric(df[spcol]) / 16
+        df.loc[df[dst] == "2x SP", dst] = pd.to_numeric(df[spcol]) * 2
 
-    # convert TFLOPS to GFLOPS
-    # tomerge = 'Processing power (TFLOPS) %s Prec.' % prec
-    # df[col] = df[col].fillna(
-    #     pd.to_numeric(df[tomerge].str.split(' ').str[0], errors='coerce') * 1000.0)
-    # df.drop(tomerge, axis=1, inplace=True)
-
-    df = df.rename(columns={col: "%s-precision GFLOPS" % prec})
+    # final cleanup: any remaining string values in dst (e.g. from the
+    # earlier merge_map pass) get normalized
+    df[dst] = to_number(df[dst], scale=1.0)
+    df = df.rename(columns={dst: f"{prec}-precision GFLOPS"})
 
 # split out 'transistors die size'
 # example: u'292\u00d7106 59 mm2'
@@ -467,9 +484,7 @@ for col in [
     "Memory Size (MB)",
     "Memory Size (GB)",
 ]:
-    df[col] = df[col].apply(lambda x: str(x))
-    df[col] = df[col].str.replace(",", "")
-    df[col] = df[col].str.extract(r"(\d*\.\d+|\d+)")
+    df[col] = to_number(df[col], anchored=False)
 
 # strip out bit width from combined column
 df = merge(df, "Memory Bus type & width (bit)", "Memory Bus type & width")
