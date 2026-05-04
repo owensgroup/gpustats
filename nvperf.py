@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/bin/sh
+''''exec "$(dirname "$0")/.venv/bin/python" "$0" "$@" 2>/dev/null || exec python3 "$0" "$@" #'''
+# ^ sh/Python polyglot shebang: sh execs ./.venv/bin/python if present, else python3.
+# Python sees the second line as a triple-quoted string literal (a no-op statement).
 
 import warnings
 import pandas as pd
