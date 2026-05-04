@@ -148,14 +148,12 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
         # for col in df.columns.values]
         # If a column-name word ends in a number or number,comma,number, delete
-        # it
-        df = df.rename(columns={"L2 Cache (MiB)": "L2_ Cache (MiB)"})
+        # it. Negative lookbehind preserves cache-level identifiers like
+        # "L1"/"L2"/"L3" so columns such as "Cache L2 (MiB)" survive intact.
         df.columns = [
-            " ".join([re.sub(r"[\d,]+$", "", word) for word in col.split()])
+            " ".join([re.sub(r"(?<!L)[\d,]+$", "", word) for word in col.split()])
             for col in df.columns.values
         ]
-        # now put back the ones we broke
-        df = df.rename(columns={"L2_ Cache (MiB)": "L2 Cache (MiB)"})
         # If a column-name word ends with one or more '[x]',
         # where 'x' is an upper- or lower-case letter or number, delete it
         df.columns = [
@@ -332,6 +330,36 @@ for col in ["TBP", "TDP"]:
         df[col].str.extract(r"(\d+)", expand=False)
     )
     df = merge(df, "TDP (Watts)", f"{col} (extracted)")
+
+# Normalize L2 cache columns into "L2 Cache (MiB)". Wikipedia uses many
+# spellings; NVIDIA puts units in the column header, Intel puts them in cells.
+# MB is treated as MiB (within ~5%, matches existing convention).
+for src, factor in [
+    ("Cache L2 (MiB)", 1.0),
+    ("L2 Cache(MiB)", 1.0),
+    ("Cache L2 (MB)", 1.0),
+    ("Cache L2 (KB)", 1.0 / 1024.0),
+]:
+    if src in df.columns:
+        df[f"{src} (extracted)"] = (
+            pd.to_numeric(df[src].astype(str).str.replace(",", ""), errors="coerce")
+            * factor
+        )
+        df = merge(df, "L2 Cache (MiB)", f"{src} (extracted)")
+for src in ["L2 cache", "Cache L2"]:
+    if src in df.columns:
+        m = df[src].astype(str).str.extract(
+            r"([\d.]+)\s*(KB|KiB|MB|MiB|GB|GiB)", expand=True
+        )
+        unit_to_mib = {
+            "KB": 1.0 / 1024.0, "KiB": 1.0 / 1024.0,
+            "MB": 1.0, "MiB": 1.0,
+            "GB": 1024.0, "GiB": 1024.0,
+        }
+        df[f"{src} (extracted)"] = pd.to_numeric(m[0], errors="coerce") * m[1].map(
+            unit_to_mib
+        )
+        df = merge(df, "L2 Cache (MiB)", f"{src} (extracted)")
 
 df["Release Price (USD)"] = df["Release Price (USD)"].str.extract(
     r"^\$?([\d,]+)", expand=False
