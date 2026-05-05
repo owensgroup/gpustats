@@ -73,6 +73,46 @@ UNIT_MIB = {  # base = MiB (binary)
 }
 
 
+# Canonical forms for column names that vary across Wikipedia tables only by
+# case or whitespace. Any incoming column whose case-and-whitespace-normalized
+# form matches one of these gets renamed to the canonical (presentation-quality)
+# form. The canonical form is what appears as a plot axis label, so keep it
+# readable. Word-order variants (e.g. "Cache L2" vs "L2 Cache") aren't case
+# differences and are NOT handled here — they're handled by explicit merges
+# elsewhere.
+CANONICAL_COLUMN_NAMES = {
+    "Core clock (MHz)",
+    "Core config",
+    "Die size (mm2)",
+    "Fab (nm)",
+    "L2 Cache (MiB)",
+    "Memory Bandwidth (GB/s)",
+    "Memory Bus type",
+    "Memory Bus width (bit)",
+    "Memory Size (GB)",
+    "Memory Size (GiB)",
+    "Memory Size (KiB)",
+    "Memory Size (MB)",
+    "Memory Size (MiB)",
+    "Model",
+    "Release Price (USD)",
+    "SM count",
+    "TDP (Watts)",
+    "Transistors (billion)",
+    "Transistors (million)",
+}
+_canonical_lookup = {
+    re.sub(r"\s+", " ", n).strip().lower(): n for n in CANONICAL_COLUMN_NAMES
+}
+
+
+def canonicalize_column(name):
+    """Return the canonical form if `name` is a case/whitespace variant of a
+    known canonical column; otherwise return `name` unchanged."""
+    norm = re.sub(r"\s+", " ", name).strip().lower()
+    return _canonical_lookup.get(norm, name)
+
+
 def to_number(series, scale=1.0, unit_pattern=None, unit_table=None,
               anchored=True):
     """Extract a numeric value from each cell of `series` and return a float Series.
@@ -203,6 +243,10 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # Get rid of trailing space in column names
         df.columns = df.columns.str.strip()
 
+        # Fold case/whitespace variants into a single canonical form so
+        # downstream merges and plot axis labels stay consistent.
+        df.columns = [canonicalize_column(c) for c in df.columns]
+
         # These columns are causing JSON problems, just delete them rather than fix it
         # undefined:17
         # "API compliance (version) OpenCL": NaN,
@@ -307,6 +351,7 @@ merge_map = {
         "Model (Code name)",
         "Model name",
         "Model name (Architecture)",
+        "Model (Architecture)",
         "Code name (console model)",
         "Branding and Model",
         # "Chip (Device)",
@@ -318,7 +363,6 @@ merge_map = {
         "Clock rate Base (MHz)",
         "Clock rate (MHz)",
         "Clock speeds Base core clock (MHz)",
-        "Core Clock (MHz)",
         "Clock rate Core (MHz)",
         "Clock speed Core (MHz)",
         "Clock speed Average (MHz)",
@@ -349,7 +393,6 @@ merge_map = {
         "Memory configuration Bus width (bit)",
     ],
     "Release Price (USD)": [
-        "Release price (USD)",
         "Release price (USD) MSRP",
     ],
 }
