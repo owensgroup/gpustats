@@ -357,9 +357,9 @@ merge_map = {
         # "Chip (Device)",
         "Model: Mobility Radeon",  # replace when AMD page updated
     ],
+    # Shader clock is a distinct, separately-clocked unit on older NVIDIA
+    # GPUs and must NOT be merged in here.
     "Core clock (MHz)": [
-        "Shaders Base clock (MHz)",
-        "Shader clock (MHz)",
         "Clock rate Base (MHz)",
         "Clock rate (MHz)",
         "Clock speeds Base core clock (MHz)",
@@ -368,7 +368,6 @@ merge_map = {
         "Clock speed Average (MHz)",
         "Core Clock rate (MHz)",
         "Clock rate (MHz) Core (MHz)",
-        "Clock speed Shader (MHz)",
         "Core Clock (MHz) Base",
     ],
     "Core config": [
