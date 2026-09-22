@@ -1,9 +1,10 @@
 #!/bin/sh
-''''exec "$(dirname "$0")/.venv/bin/python" "$0" "$@" 2>/dev/null || exec python3 "$0" "$@" #'''
+''''test -x "$(dirname "$0")/.venv/bin/python" && exec "$(dirname "$0")/.venv/bin/python" "$0" "$@"; exec python3 "$0" "$@" #'''
 # ^ sh/Python polyglot shebang: sh execs ./.venv/bin/python if present, else python3.
 # Python sees the second line as a triple-quoted string literal (a no-op statement).
+# Test for the interpreter rather than exec'ing it with 2>/dev/null: that
+# redirection outlives the exec and silently discards every traceback.
 
-import warnings
 import pandas as pd
 import numpy as np
 import itertools
@@ -16,11 +17,6 @@ from joblib import Parallel, delayed
 import altair as alt
 from collections import Counter
 
-warnings.filterwarnings(
-    "ignore",
-    message="Downcasting object dtype arrays",
-    category=FutureWarning,
-)
 pd.set_option("display.max_columns", None)
 
 data = {
@@ -57,7 +53,9 @@ def merge(df, dst, src, replaceNoWithNaN=False, delete=True, silentlySkip=True):
     if dst not in df.columns:
         df[dst] = df[src]
     else:
-        df[dst] = df[dst].fillna(df[src]).infer_objects(copy=False)
+        # No copy= argument: Copy-on-Write has been active since pandas 3.0, so
+        # the keyword is deprecated and its lazy-copy behavior is the default.
+        df[dst] = df[dst].fillna(df[src]).infer_objects()
     if delete:
         df.drop(src, axis=1, inplace=True)
     return df
@@ -170,17 +168,41 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
     html = re.sub("\u2014", "", html)  # delete em-dash (indicates empty cell)
     html = re.sub(r"mm<sup>2</sup>", "mm2", html)  # mm^2 -> mm2
     html = re.sub("<span[^>]*>\u00d7</span>", "\u00d7", html)  # unwrap × from span styling
-    html = re.sub("\u00d710<sup>6</sup>", "\u00d7106", html)  # 10^6 -> 106
-    html = re.sub("\u00d710<sup>9</sup>", "\u00d7109", html)  # 10^9 -> 109
+    # 10^n -> 10n, for any exponent and with optional space after the times
+    # sign. This must precede the footnote strip below: that regex cannot tell
+    # a real exponent from a reference marker, and would eat the n, silently
+    # turning '58 x10<sup>9</sup>' into the unparseable '58 x 10'.
+    html = re.sub("\u00d7\\s*10<sup>(\\d+)</sup>", "\u00d710\\1", html)
     html = re.sub(r"<sup>[\d\*]+</sup>", "", html)  # delete footnotes (num or *)
+    # Editors occasionally typo a span attribute: colspan="2' instead of
+    # colspan="2". pandas calls int() on the raw value, so one typo anywhere on
+    # the page raises and we get no tables at all. Keep the leading integer (1
+    # if there is none), and name the offenders -- they want fixing upstream.
+    bad_spans = re.findall(r'\b(?:col|row)span\s*=\s*"(?!\d+")[^"]*"', html)
+    if bad_spans:
+        print(
+            "  malformed span attributes (please fix on Wikipedia): "
+            + ", ".join(sorted(set(bad_spans)))
+        )
+    html = re.sub(
+        r'\b(col|row)span\s*=\s*"\s*(\d+)?[^"]*"',
+        lambda m: f'{m.group(1)}span="{m.group(2) or 1}"',
+        html,
+    )
     # with open("/tmp/%s.html" % vendor, "wb") as f:
     #     f.write(html.encode("utf8"))
 
-    dfs = pd.read_html(
-        StringIO(html),
-        match=re.compile("Launch|Release Date & Price|Release date"),
-        parse_dates=True,
-    )
+    try:
+        dfs = pd.read_html(
+            StringIO(html),
+            match=re.compile("Launch|Release Date & Price|Release date"),
+            parse_dates=True,
+        )
+    except ValueError as e:
+        # Say which vendor and page broke; a bare pandas traceback doesn't.
+        raise ValueError(
+            f"{vendor}: no tables parsed from {', '.join(data[vendor]['urls'])}: {e}"
+        ) from e
     # purge tables with <= 2 columns, because they're not real/helpful
     dfs = [df for df in dfs if len(df.columns.values) > 2]
     dfs = [
@@ -494,29 +516,47 @@ for prec in ["Single", "Double", "Half"]:
     df[dst] = to_number(df[dst], scale=1.0)
     df = df.rename(columns={dst: f"{prec}-precision GFLOPS"})
 
-# split out 'transistors die size'
-# example: u'292\u00d7106 59 mm2'
-for exponent in ["\u00d7106", "\u00d7109", "B"]:
-    dftds = df["Transistors Die Size"].str.extract(
-        r"^([\d\.]+)%s (\d+) mm2" % exponent, expand=True
-    )
-    if exponent == "\u00d7106":
-        df["Transistors (million)"] = df["Transistors (million)"].fillna(
-            pd.to_numeric(dftds[0], errors="coerce")
-        )
-    if exponent == "\u00d7109" or exponent == "B":
-        df["Transistors (billion)"] = df["Transistors (billion)"].fillna(
-            pd.to_numeric(dftds[0], errors="coerce")
-        )
-    df["Die size (mm2)"] = df["Die size (mm2)"].fillna(
-        pd.to_numeric(dftds[1], errors="coerce")
-    )
-
-# remove references from end of model/transistor names
+# remove references from end of model/transistor names. This has to happen
+# before the die-size split below fills numbers into Transistors (million):
+# .str.replace() on an object column yields NaN for every non-string element,
+# so stripping references afterwards would erase whatever we just filled in.
 for col in ["Model", "Transistors (million)"]:
     df[col] = df[col].str.replace(referencesAtEnd, "", regex=True)
     # then take 'em out of the middle too
     df[col] = df[col].str.replace(r"\[\d+\]", "", regex=True)
+
+# split out 'transistors die size', a count and a die size in one cell
+# examples: '292\u00d7106 59 mm2', '53.9 billion 357 mm2', '57.7\u00d7109 ~531 mm2',
+#           '12.5\u00d7109 495mm2', '53.9 billion 356.5 mm2'
+# Editors spell the multiplier several ways and are inconsistent about the '~',
+# the decimal point, and the space before 'mm2', so take them all in one pass
+# rather than one regex per spelling.
+TRANSISTOR_SCALE = {
+    "\u00d7106": 1e6,
+    "\u00d7109": 1e9,
+    "M": 1e6,
+    "B": 1e9,
+    "million": 1e6,
+    "billion": 1e9,
+}
+dftds = df["Transistors Die Size"].str.extract(
+    # longest alternative first, so 'billion' wins over 'B'
+    r"^([\d\.]+)\s*(%s)\s+~?([\d\.]+)\s*mm2"
+    % "|".join(sorted(TRANSISTOR_SCALE, key=len, reverse=True)),
+    expand=True,
+)
+transistors = pd.to_numeric(dftds[0], errors="coerce") * dftds[1].map(
+    TRANSISTOR_SCALE
+)
+df["Transistors (million)"] = df["Transistors (million)"].fillna(
+    transistors / 1e6
+)
+df["Transistors (billion)"] = df["Transistors (billion)"].fillna(
+    transistors / 1e9
+)
+df["Die size (mm2)"] = df["Die size (mm2)"].fillna(
+    pd.to_numeric(dftds[2], errors="coerce")
+)
 
 # Simple treatment of multiple columns: just grab the first number
 for col in [
