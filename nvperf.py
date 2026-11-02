@@ -13,7 +13,6 @@ import re
 import os
 import json
 from io import StringIO
-from joblib import Parallel, delayed
 import altair as alt
 from collections import Counter
 
@@ -1025,6 +1024,26 @@ def stripShorthand(str):
     return str
 
 
+def used_columns(c):
+    """Column names a chart's encodings reference. Each field is either a
+    shorthand string ("Launch:T") or an Altair channel object (alt.Color)."""
+    fields = [c["x"], c["y"], c["color"], c["shape"], *c["tooltip"]]
+    names = [f if isinstance(f, str) else f.shorthand for f in fields]
+    return list(dict.fromkeys(stripShorthand(n) for n in names))
+
+
+def trim_df(c):
+    """Keep only the columns the chart uses. Altair embeds the whole
+    DataFrame in every output file, and serializing hundreds of unused
+    columns dominated runtime (and made each HTML file ~19 MB)."""
+    cols = used_columns(c)
+    missing = [col for col in cols if col not in c["df"].columns]
+    if missing:
+        print(f"  {c['title']}: can't trim, unknown columns {missing}")
+        return c["df"]
+    return c["df"][cols]
+
+
 for key in config:
     color_selection = alt.selection_point(encodings=["color"], bind="legend")
     shape_selection = alt.selection_point(encodings=["shape"], bind="legend")
@@ -1039,7 +1058,7 @@ for key in config:
     c = config[key]
     title = c["title"]
     base = (
-        alt.Chart(c["df"])
+        alt.Chart(trim_df(c))
         .encode(
             x=alt.X(
                 c["x"],
