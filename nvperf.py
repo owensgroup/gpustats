@@ -43,9 +43,52 @@ referencesAtEnd = r"(?:\s*\[[a-z\d]+\])+(?:\d+,)?(?:\d+)?$"
 referencesOnlyAtEnd = r"(?:\s*\[[a-z\d]+\])+$"
 
 
+def normalize_name(name):
+    """Case- and whitespace-insensitive key for comparing column names."""
+    return re.sub(r"\s+", " ", name).strip().lower()
+
+
+def find_column(df, name):
+    """Return the column of `df` named `name`, ignoring case and whitespace
+    (an exact match wins), or None. Wikipedia editors recapitalize headers
+    ("Memory configuration" -> "Memory Configuration"); exact matching made
+    every such edit silently drop the column's data."""
+    if name in df.columns:
+        return name
+    key = normalize_name(name)
+    matches = [c for c in df.columns if normalize_name(c) == key]
+    return matches[0] if matches else None
+
+
+def matching_columns(df, pattern):
+    """Columns of `df` whose whole name matches regex `pattern`, ignoring
+    case and runs of whitespace."""
+    return [
+        c for c in df.columns
+        if re.fullmatch(pattern, re.sub(r"\s+", " ", c).strip(), re.IGNORECASE)
+    ]
+
+
+# Source names that merge() was asked for and never found. Reported at the
+# end of the run so a Wikipedia header change doesn't silently lose data.
+merge_sources_requested = set()
+merge_sources_found = set()
+
+
 def merge(df, dst, src, replaceNoWithNaN=False, delete=True, silentlySkip=True):
-    if silentlySkip and src not in df.columns:
+    merge_sources_requested.add(src)
+    found = find_column(df, src)
+    if found == dst:
+        # src is only a case variant of dst and canonicalization already
+        # folded it in; merging dst into itself would drop it.
+        merge_sources_found.add(src)
         return df
+    if found is None:
+        if silentlySkip:
+            return df
+        raise KeyError(src)
+    merge_sources_found.add(src)
+    src = found
     df[src] = df[src].replace("\u2014", np.nan)  # em-dash
     if replaceNoWithNaN:
         df[src] = df[src].replace("No", np.nan)
@@ -98,16 +141,13 @@ CANONICAL_COLUMN_NAMES = {
     "Transistors (billion)",
     "Transistors (million)",
 }
-_canonical_lookup = {
-    re.sub(r"\s+", " ", n).strip().lower(): n for n in CANONICAL_COLUMN_NAMES
-}
+_canonical_lookup = {normalize_name(n): n for n in CANONICAL_COLUMN_NAMES}
 
 
 def canonicalize_column(name):
     """Return the canonical form if `name` is a case/whitespace variant of a
     known canonical column; otherwise return `name` unchanged."""
-    norm = re.sub(r"\s+", " ", name).strip().lower()
-    return _canonical_lookup.get(norm, name)
+    return _canonical_lookup.get(normalize_name(name), name)
 
 
 def to_number(series, scale=1.0, unit_pattern=None, unit_table=None,
@@ -243,10 +283,17 @@ for vendor in ["NVIDIA", "AMD", "Intel"]:
         # df.columns = [re.sub(' Unnamed: [0-9]+_level_[0-9]+', '', col)
         # for col in df.columns.values]
         # If a column-name word ends in a number or number,comma,number, delete
-        # it. Negative lookbehind preserves cache-level identifiers like
-        # "L1"/"L2"/"L3" so columns such as "Cache L2 (MiB)" survive intact.
+        # it (it's a footnote number). Words that are themselves identifiers
+        # ending in digits are kept: cache levels ("L2") and number formats
+        # ("FP32", "FP64", "INT8", "BF16", "TF32"). Stripping the latter turned
+        # "FP32" and "FP64" into the same "FP", so the Instinct tables' FP32
+        # column was unrecognizable and collided with the FP64 one.
+        keep_word = re.compile(r"^(?:L\d|FP\d+|INT\d+|BF16|TF32)$")
         df.columns = [
-            " ".join([re.sub(r"(?<!L)[\d,]+$", "", word) for word in col.split()])
+            " ".join(
+                word if keep_word.match(word) else re.sub(r"[\d,]+$", "", word)
+                for word in col.split()
+            )
             for col in df.columns.values
         ]
         # If a column-name word ends with one or more '[x]',
@@ -400,14 +447,17 @@ merge_map = {
     ],
     "Memory Size (MB)": [
         "Memory Size (MiB)",
+        "Memory configuration Size (MB)",
     ],
     "Memory Size (GB)": [
         "Memory Size (GiB)",
+        "Memory configuration Size (GB)",
     ],
     "Memory Bus type": [
         "Memory RAM type",
         "Memory Type",
         "Memory configuration DRAM type",
+        "Memory configuration Bus type",
     ],
     "Memory Bus width (bit)": [
         "Memory configuration Bus width (bit)",
@@ -437,11 +487,11 @@ for src, scale in [
     ("Cache L2 (MB)", 1.0),
     ("Cache L2 (KB)", 1.0 / 1024.0),
 ]:
-    if src in df.columns:
+    if src := find_column(df, src):
         df[src] = to_number(df[src], scale=scale)
         df = merge(df, "L2 Cache (MiB)", src)
 for src in ["L2 cache", "Cache L2"]:
-    if src in df.columns:
+    if src := find_column(df, src):
         df[src] = to_number(
             df[src], unit_pattern="KB|KiB|MB|MiB|GB|GiB",
             unit_table=UNIT_MIB, anchored=False,
@@ -463,49 +513,56 @@ for col in ["Transistors (million)", "Die size (mm2)", "Core config"]:
     df = df[~df[col].str.contains(r"\u00d7[2-9]$", re.UNICODE, na=False)]
     df = df[~df[col].str.contains(r"^2x", re.UNICODE, na=False)]
 
-# Normalize per-precision GFLOPS columns. Multiple Wikipedia source-column
-# shapes need merging into "Processing power (GFLOPS) {prec} precision",
-# each with a known unit scale. Order across precisions is preserved (matches
-# original code): all-precs TFLOPS pass, then MFLOPS-only-Single, then Boost
-# pass with cleanup and rename.
-flops_tflops_sources = [
-    # (column-name template, scale to GFLOPS)
-    ("Processing power TFLOPS {prec}",                          1000),
-    ("Processing power (TFLOPS) {prec}",                        1000),
-    ("Processing power (TFLOPS) {prec} precision",              1000),
-    ("Processing power (TFLOPS) {prec} precision (base)",       1000),
-    ("Processing power (TFLOPS) {prec} precision (boost)",      1000),
-    # XXX preserved-behavior: these say (GFLOPS) but are scaled by 1000.
-    # Possibly a bug in the original — investigate whether source cells are
-    # actually in TFLOPS despite the column name claiming GFLOPS.
-    ("Processing power (GFLOPS) {prec} precision (MAD or FMA)", 1000),
-    ("Processing power (GFLOPS) {prec} precision (FMA)",        1000),
-]
+# Normalize per-precision FLOPS columns into "Processing power (GFLOPS) {prec}
+# precision". Wikipedia spells these headers many ways ("Single precision
+# (base)", "Singleprecision", "Single Precision FP32 (1:1)", "Single Precision
+# (FP32)", "Processing Power Single Precision (TFLOPS)", "(TFLOPS) Single
+# precision (MAD or FMA)", ...), so rather than list them all, take every
+# "Processing power" column that names the precision and scale it by the unit
+# in its name. Tensor-core/XMX throughput is a different quantity and is
+# excluded. Boost-clock columns go last so the base-clock figure wins when a
+# table has both (merge() keeps the first non-null value).
+FLOPS_SCALE = {"tflops": 1000.0, "gflops": 1.0}
+FP_NAME = {"Single": "FP32", "Double": "FP64", "Half": "FP16"}
+
+
+def flops_sources(df, prec, dst):
+    """(column, scale-to-GFLOPS) pairs holding `prec`-precision FLOPS."""
+    name_re = re.compile(rf"^processing power\b.*\b{prec}\s*(?:precision)?\b", re.I)
+    sources = []
+    for col in df.columns:
+        if col == dst or not name_re.search(col) or re.search(r"tensor|xmx", col, re.I):
+            continue
+        units = [u for u in FLOPS_SCALE if u in col.lower()]
+        if len(units) != 1:
+            print(f"  FLOPS column with no clear unit, skipped: {col!r}")
+            continue
+        sources.append((col, FLOPS_SCALE[units[0]]))
+    # AMD Instinct: "Vector TFLOPS FP32" (vector ALUs, not matrix cores)
+    sources += [(c, 1000.0) for c in matching_columns(df, rf"Vector TFLOPS {FP_NAME[prec]}")]
+    return sorted(sources, key=lambda cs: "boost" in cs[0].lower())
+
+
 for prec in ["Single", "Double", "Half"]:
     dst = f"Processing power (GFLOPS) {prec} precision"
-    for tmpl, scale in flops_tflops_sources:
-        src = tmpl.format(prec=prec)
-        if src in df.columns:
+    for src, scale in flops_sources(df, prec, dst):
+        # GFLOPS cells are merged as-is: they may hold cross-precision refs
+        # ("1/16 SP") resolved below, and the final cleanup extracts numbers.
+        if scale != 1.0:
             df[src] = to_number(df[src], scale=scale)
-            df = merge(df, dst, src)
+        df = merge(df, dst, src)
 
 # MFLOPS only applies to single precision
-src = "Performance (MFLOPS FP32)"
-if src in df.columns:
+if src := find_column(df, "Performance (MFLOPS FP32)"):
     df[src] = to_number(df[src], scale=1.0 / 1000.0)
     df = merge(df, "Processing power (GFLOPS) Single precision", src)
 
-# Boost: "Processing power (GFLOPS) {prec}" merge, plus cross-precision
-# refs ("1/16 SP", "2x SP"), final cleanup, and rename. Single precision is
-# processed first so spcol is set before Half/Double consult it.
+# Cross-precision refs ("1/16 SP", "2x SP"), final cleanup, and rename.
+# Single precision is processed first so spcol is set before Half/Double
+# consult it.
 for prec in ["Single", "Double", "Half"]:
     dst = f"Processing power (GFLOPS) {prec} precision"
     spcol = "Single-precision GFLOPS"
-    src = f"Processing power (GFLOPS) {prec}"
-    if src in df.columns:
-        df[src] = to_number(df[src], scale=1.0)
-        df = merge(df, dst, src)
-
     if prec != "Single":
         df.loc[df[dst] == "1/16 SP", dst] = pd.to_numeric(df[spcol]) / 16
         df.loc[df[dst] == "2x SP", dst] = pd.to_numeric(df[spcol]) * 2
@@ -616,7 +673,7 @@ for col, pattern in [
     ("Core config", r"(\d+) Xe cores"),  # Alchemist (Xe)
     ("Core Core Config", r"(\d+) Xe2-cores"),  # Battlemage (Xe2)
 ]:
-    if col in df.columns:
+    if col := find_column(df, col):
         df["SM count (extracted)"] = df[col].str.extract(pattern, expand=False)
         df = merge(df, "SM count", "SM count (extracted)")
 df["SM count (extracted)"] = df["Core config"].str.extract(
@@ -667,6 +724,13 @@ for col in [
 ]:
     df[col] = pd.to_numeric(df[col], errors="coerce")
     df[col] = df[col].astype(float)
+
+unfound = sorted(merge_sources_requested - merge_sources_found)
+if unfound:
+    print(
+        "merge sources not found in any table (renamed on Wikipedia? "
+        "or obsolete and removable):\n  " + "\n  ".join(unfound)
+    )
 
 # compute new columns
 df["Arithmetic intensity (FLOP/B)"] = pd.to_numeric(
